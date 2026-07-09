@@ -55,7 +55,19 @@ export default {
       return handleApi(request, env, url);
     }
 
-    return env.ASSETS.fetch(request);
+    const assetResponse = await env.ASSETS.fetch(request);
+    if (assetResponse.status === 404) {
+      const notFoundUrl = new URL('/_not-found/index.html', request.url);
+      const notFoundReq = new Request(notFoundUrl.toString(), { headers: request.headers });
+      const notFoundRes = await env.ASSETS.fetch(notFoundReq);
+      if (notFoundRes.status === 200) {
+        return new Response(notFoundRes.body, {
+          status: 404,
+          headers: notFoundRes.headers,
+        });
+      }
+    }
+    return assetResponse;
   },
 };
 

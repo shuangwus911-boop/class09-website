@@ -36,7 +36,7 @@ export default function HomePage() {
         <span className="sec-cn">时 光 相 册</span>
       </div>
       <div className="sec-note">
-        每一个值得停留的时刻　·　点开卡片，照片折扇展开　·　卡片底部是那天的一句童言
+        每一个值得停留的时刻，都是我们美好的回忆
       </div>
       <MomentCarousel moments={moments} />
 

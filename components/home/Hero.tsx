@@ -10,7 +10,6 @@ export default function Hero() {
           <br />
           共度<em>六个</em>春夏秋冬。
         </h1>
-        <div className="hero-subtitle">{SITE.jpSubtitle}</div>
         <p className="hero-lead">
           课堂里、操场上、放学路上的微小闪光，
           <br />

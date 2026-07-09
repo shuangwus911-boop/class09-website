@@ -1,5 +1,10 @@
 name = "class09-website"
+main = "worker/index.ts"
 compatibility_date = "2024-09-23"
 
 [assets]
 directory = "./out"
+binding = "ASSETS"
+
+[vars]
+ADMIN_SECRET = "class09-admin-secret-2025"

@@ -592,8 +592,15 @@ button { font-family: inherit; }
 }
 
 /* -------- Admin CMS -------- */
+:root {
+  --badge-red: #c74b3f;
+  --badge-green: #5a8a5e;
+  --badge-orange: #c77b2a;
+  --badge-blue: #4a7fa8;
+  --badge-purple: #7c5aa8;
+}
 .admin-wrap {
-  max-width: 720px;
+  max-width: 780px;
   margin: 0 auto;
   padding: 40px 20px;
 }
@@ -663,28 +670,95 @@ button { font-family: inherit; }
   padding: 20px;
   background: var(--cream);
 }
-.admin-section h3 {
-  font-size: 16px; letter-spacing: 2px; margin: 0 0 8px;
+.admin-section-top {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 16px;
+}
+.admin-section-top h3 {
+  font-size: 16px; letter-spacing: 2px; margin: 0;
+}
+.admin-count {
+  display: inline-block; background: var(--paper-2);
+  font-size: 11px; padding: 2px 8px; border-radius: 10px;
+  margin-left: 8px; color: var(--ink-soft); letter-spacing: 0;
 }
 .admin-hint {
   font-size: 11px; color: var(--ink-soft); letter-spacing: 1.5px; margin-bottom: 16px;
 }
-.admin-section textarea {
-  width: 100%; font-family: "SF Mono", "Fira Code", monospace;
-  font-size: 12px; line-height: 1.6;
-  padding: 12px;
-  border: 1px solid rgba(61,47,33,0.2);
-  background: var(--paper);
-  resize: vertical;
+.admin-btn-add {
+  padding: 6px 14px;
+  background: var(--sage-deep); color: var(--cream);
+  border: none; font-size: 11px; letter-spacing: 1px;
+  cursor: pointer;
 }
-.admin-section textarea:focus { outline: none; border-color: var(--warm-red); }
+.admin-card-list {
+  display: flex; flex-direction: column; gap: 16px;
+  margin-bottom: 16px;
+}
+.admin-card {
+  border: 1px solid rgba(61,47,33,0.18);
+  padding: 16px;
+  background: var(--paper);
+}
+.admin-card-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 12px;
+}
+.admin-card-badge {
+  font-size: 11px; color: var(--cream); padding: 2px 10px;
+  letter-spacing: 1px;
+}
+.admin-btn-icon {
+  width: 24px; height: 24px; line-height: 22px; text-align: center;
+  border: 1px solid rgba(61,47,33,0.3); background: none;
+  color: var(--ink-soft); cursor: pointer; font-size: 14px;
+}
+.admin-btn-icon:hover { color: var(--warm-red); border-color: var(--warm-red); }
+.admin-card-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+}
+.admin-card-grid label {
+  display: flex; flex-direction: column; gap: 3px;
+}
+.admin-card-grid label > span {
+  font-size: 10px; color: var(--ink-soft); letter-spacing: 1px; text-transform: uppercase;
+}
+.admin-card-grid input,
+.admin-card-grid select,
+.admin-card-grid textarea {
+  padding: 7px 10px; border: 1px solid rgba(61,47,33,0.2);
+  background: var(--cream); font-size: 13px; font-family: inherit;
+}
+.admin-card-grid input:focus,
+.admin-card-grid select:focus,
+.admin-card-grid textarea:focus { outline: none; border-color: var(--warm-red); }
+.admin-full { grid-column: 1 / -1; }
+.admin-check {
+  flex-direction: row !important; align-items: center; gap: 8px !important;
+}
+.admin-check input[type="checkbox"] {
+  width: 16px; height: 16px; accent-color: var(--warm-red);
+}
+.admin-card-detail {
+  margin-top: 10px; border-top: 1px dashed rgba(61,47,33,0.15);
+  padding-top: 10px;
+}
+.admin-card-detail summary {
+  font-size: 11px; color: var(--ink-soft); cursor: pointer; letter-spacing: 1px;
+  margin-bottom: 8px;
+}
+.admin-empty {
+  text-align: center; padding: 30px; color: var(--ink-soft);
+  font-size: 13px; letter-spacing: 1px;
+}
 .admin-actions {
   display: flex; align-items: center; gap: 12px; margin-top: 12px;
+  padding-top: 12px; border-top: 1px solid rgba(61,47,33,0.1);
 }
-.admin-actions button {
-  padding: 8px 20px;
+.admin-btn-save {
+  padding: 10px 24px;
   background: var(--warm-red); color: var(--cream);
-  border: none; font-size: 12px; letter-spacing: 2px; cursor: pointer;
+  border: none; font-size: 13px; letter-spacing: 2px; cursor: pointer;
 }
-.admin-actions button:disabled { opacity: 0.5; }
+.admin-btn-save:disabled { opacity: 0.5; }
 .admin-msg { font-size: 12px; color: var(--sage-deep); letter-spacing: 1px; }

@@ -35,7 +35,7 @@ export default function Page() {
           <div className="album-semester-label">{semester}</div>
           <div className="album-grid">
             {items.map((m) => (
-              <div key={m.slug} className="album-card">
+              <a key={m.slug} href={`/album/${m.slug}/`} className="album-card">
                 <div className="album-card-cover">
                   <MomentCover slug={m.cover} />
                   <div className="moment-count">共 · {m.count} 张</div>
@@ -49,7 +49,7 @@ export default function Page() {
                     </div>
                   )}
                 </div>
-              </div>
+              </a>
             ))}
           </div>
         </div>

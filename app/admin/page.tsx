@@ -275,6 +275,27 @@ function ImageUploader({ token }: { token: string }) {
     }
 
     setResults(prev => [...newResults, ...prev]);
+
+    // Auto-add uploaded photos to the moment's photos array
+    if (newResults.length > 0) {
+      const updated = moments.map(m => {
+        if (m.slug !== selectedSlug) return m;
+        const newPhotos = newResults.map(r => ({
+          id: r.url.split('/').pop()?.replace(/\.\w+$/, '') || `p-${Date.now()}`,
+          caption: r.name.replace(/\.\w+$/, ''),
+          src: r.url,
+        }));
+        return { ...m, photos: [...m.photos, ...newPhotos], count: m.count + newResults.length };
+      });
+      setMoments(updated);
+      // Persist to CMS
+      fetch(`${API_BASE}/moments`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(updated),
+      });
+    }
+
     setUploading(false);
   };
 

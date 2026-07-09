@@ -107,6 +107,13 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
         const data = await env.CLASS09_CMS.get('moments', 'json');
         return json(data || []);
       }
+      if (path.startsWith('moments/')) {
+        const slug = path.replace('moments/', '');
+        const data = await env.CLASS09_CMS.get('moments', 'json') as any[] | null;
+        const moment = (data || []).find((m: any) => m.slug === slug);
+        if (!moment) return json({ error: '未找到该时刻' }, 404);
+        return json(moment);
+      }
       if (path === 'honors') {
         const data = await env.CLASS09_CMS.get('honors', 'json');
         return json(data || []);

@@ -813,3 +813,136 @@ button { font-family: inherit; }
   object-fit: cover;
   display: block;
 }
+
+/* -------- Photo Detail Page -------- */
+.detail-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-top: 32px; margin-bottom: 8px;
+}
+.detail-back {
+  font-size: 12px; letter-spacing: 2px; color: var(--ink-soft);
+  text-decoration: none; transition: color 0.2s;
+}
+.detail-back:hover { color: var(--warm-red); }
+.detail-badge {
+  font-size: 10px; letter-spacing: 2px; padding: 3px 12px;
+  color: var(--cream);
+}
+.detail-badge--red { background: var(--warm-red); }
+.detail-badge--green { background: var(--sage-deep); }
+.detail-badge--orange { background: var(--warm-orange); }
+.detail-badge--blue { background: #5b7d8c; }
+.detail-badge--purple { background: #8a5b8c; }
+
+.detail-hero { text-align: center; margin: 24px 0 32px; }
+.detail-title {
+  font-size: 28px; letter-spacing: 4px; margin: 0 0 8px;
+  font-weight: 500;
+}
+.detail-meta {
+  display: flex; justify-content: center; gap: 12px;
+  font-size: 12px; color: var(--ink-soft); letter-spacing: 2px;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 32px;
+}
+.detail-photo {
+  position: relative;
+  border: 1px solid rgba(61,47,33,0.15);
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+.detail-photo:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 20px rgba(61,47,33,0.12);
+}
+.detail-photo img {
+  width: 100%; display: block;
+}
+.detail-photo-cap {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  padding: 20px 10px 8px;
+  background: linear-gradient(transparent, rgba(61,47,33,0.7));
+  font-size: 11px; color: var(--cream); letter-spacing: 1.5px;
+}
+
+.detail-placeholder {
+  text-align: center;
+  padding: 48px 20px;
+  border: 1px dashed rgba(61,47,33,0.2);
+  margin-bottom: 32px;
+  color: var(--ink-soft);
+}
+.detail-placeholder-icon {
+  margin-bottom: 16px; opacity: 0.4;
+}
+.detail-placeholder p {
+  margin: 0 0 6px; font-size: 13px; letter-spacing: 2px;
+}
+.detail-placeholder-hint {
+  font-size: 11px; color: rgba(61,47,33,0.5);
+}
+
+.detail-quote {
+  margin: 0 auto 32px;
+  max-width: 520px;
+  padding: 24px 28px;
+  border: 1px solid rgba(61,47,33,0.15);
+  background: var(--cream);
+  position: relative;
+}
+.detail-quote-mark {
+  font-size: 36px; line-height: 1;
+  color: var(--warm-red); opacity: 0.6;
+  font-family: "Hiragino Mincho ProN", serif;
+  margin-bottom: 8px;
+}
+.detail-quote-text {
+  font-size: 14px; line-height: 2; letter-spacing: 1px;
+  margin: 0 0 12px;
+}
+.detail-quote-footer {
+  display: flex; justify-content: space-between;
+  font-size: 11px; color: var(--ink-soft); letter-spacing: 1.5px;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(61,47,33,0.2);
+}
+
+.detail-lightbox {
+  position: fixed; inset: 0;
+  background: rgba(61,47,33,0.9);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1000; cursor: pointer;
+}
+.detail-lightbox img {
+  max-width: 90vw; max-height: 85vh;
+  object-fit: contain;
+  border: 4px solid var(--cream);
+}
+.detail-lightbox-close {
+  position: absolute; top: 20px; right: 24px;
+  width: 40px; height: 40px;
+  background: var(--cream); border: none;
+  font-size: 24px; color: var(--ink);
+  cursor: pointer; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+}
+
+.detail-empty {
+  text-align: center; padding: 60px 20px;
+  color: var(--ink-soft); letter-spacing: 2px;
+}
+.detail-empty a {
+  display: inline-block; margin-top: 12px;
+  color: var(--warm-red); font-size: 12px;
+}
+
+@media (max-width: 780px) {
+  .detail-grid { grid-template-columns: 1fr 1fr; }
+  .detail-title { font-size: 22px; }
+}

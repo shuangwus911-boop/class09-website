@@ -17,9 +17,9 @@ export default function Hero() {
           <br />
           都被我们收进这本纸页中，一页一页地长大。
         </p>
-        <button className="cta" type="button">
+        <a className="cta" href="/album/">
           走 进 教 室 ›
-        </button>
+        </a>
       </div>
       <div className="hero-illust">
         <HeroIllust />

@@ -627,7 +627,10 @@ export default function AdminPage() {
     <div className="admin-wrap">
       <div className="admin-header">
         <h2>09班 · 内容管理 <span style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 400, marginLeft: 8 }}>{role === 'admin' ? '站长' : '编辑'}</span></h2>
-        <button onClick={logout}>退出</button>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+          <a href="/" style={{ fontSize: 12, letterSpacing: 1, color: 'var(--ink-soft)', textDecoration: 'none', transition: 'color 0.2s' }} onMouseEnter={e => (e.currentTarget.style.color = 'var(--warm-red)')} onMouseLeave={e => (e.currentTarget.style.color = 'var(--ink-soft)')}>← 返回首页</a>
+          <button onClick={logout}>退出</button>
+        </div>
       </div>
       <div className="admin-tabs">
         <button className={tab === 'moments' ? 'active' : ''} onClick={() => setTab('moments')}>时光相册</button>

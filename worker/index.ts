@@ -1,9 +1,10 @@
 // Cloudflare Worker entry point
-// Handles /api/* routes, falls through to static assets for everything else
+// Handles /api/* routes, /images/* for R2 assets, falls through to static assets for everything else
 
 interface Env {
   ASSETS: Fetcher;
   CLASS09_CMS?: KVNamespace;
+  IMAGES?: R2Bucket;
   ADMIN_SECRET: string;
 }
 
@@ -45,6 +46,11 @@ export default {
       });
     }
 
+    // Serve images from R2
+    if (url.pathname.startsWith('/images/')) {
+      return handleImages(request, env, url);
+    }
+
     if (url.pathname.startsWith('/api/')) {
       return handleApi(request, env, url);
     }
@@ -52,6 +58,29 @@ export default {
     return env.ASSETS.fetch(request);
   },
 };
+
+async function handleImages(request: Request, env: Env, url: URL): Promise<Response> {
+  if (!env.IMAGES) {
+    return new Response('Image storage not configured', { status: 503 });
+  }
+  if (request.method !== 'GET') {
+    return new Response('Method not allowed', { status: 405 });
+  }
+
+  const key = url.pathname.replace('/images/', '');
+  if (!key) return new Response('Not found', { status: 404 });
+
+  const object = await env.IMAGES.get(key);
+  if (!object) return new Response('Not found', { status: 404 });
+
+  const headers = new Headers();
+  headers.set('Content-Type', object.httpMetadata?.contentType || 'image/jpeg');
+  headers.set('Cache-Control', 'public, max-age=31536000, immutable');
+  headers.set('Access-Control-Allow-Origin', '*');
+  object.writeHttpMetadata(headers);
+
+  return new Response(object.body, { headers });
+}
 
 async function handleApi(request: Request, env: Env, url: URL): Promise<Response> {
   try {
@@ -94,6 +123,32 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     if (!token) return json({ error: '未登录' }, 401);
     const user = verifyToken(token, env.ADMIN_SECRET);
     if (!user) return json({ error: '登录已过期' }, 401);
+
+    // POST /api/upload — upload image to R2
+    if (path === 'upload' && request.method === 'POST') {
+      if (!env.IMAGES) return json({ error: 'R2 存储桶未配置' }, 503);
+      const formData = await request.formData();
+      const file = formData.get('file') as File | null;
+      const key = formData.get('key') as string | null;
+      if (!file || !key) return json({ error: '缺少 file 或 key 参数' }, 400);
+
+      // Validate file type
+      const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+      if (!allowed.includes(file.type)) {
+        return json({ error: '仅支持 jpg/png/webp/gif 格式' }, 400);
+      }
+      // Max 10MB
+      if (file.size > 10 * 1024 * 1024) {
+        return json({ error: '文件大小不能超过 10MB' }, 400);
+      }
+
+      await env.IMAGES.put(key, file.stream(), {
+        httpMetadata: { contentType: file.type },
+      });
+
+      const imageUrl = `/images/${key}`;
+      return json({ ok: true, url: imageUrl, key });
+    }
 
     if (path === 'moments' && request.method === 'PUT') {
       const body = await request.json();

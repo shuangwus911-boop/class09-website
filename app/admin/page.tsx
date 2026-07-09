@@ -232,9 +232,107 @@ function HonorEditor({ token }: { token: string }) {
   );
 }
 
+function ImageUploader({ token }: { token: string }) {
+  const [moments, setMoments] = useState<Moment[]>([]);
+  const [selectedSlug, setSelectedSlug] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [results, setResults] = useState<{ name: string; url: string }[]>([]);
+  const [error, setError] = useState('');
+  const [dragOver, setDragOver] = useState(false);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/moments`).then(r => r.json()).then(d => { if (Array.isArray(d)) setMoments(d); });
+  }, []);
+
+  const uploadFiles = async (files: FileList | File[]) => {
+    if (!selectedSlug) { setError('请先选择归属时刻'); return; }
+    setError('');
+    setUploading(true);
+    const newResults: { name: string; url: string }[] = [];
+
+    for (const file of Array.from(files)) {
+      const ext = file.name.split('.').pop() || 'jpg';
+      const key = `${selectedSlug}/${Date.now()}-${Math.random().toString(36).slice(2, 6)}.${ext}`;
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('key', key);
+
+      try {
+        const res = await fetch(`${API_BASE}/upload`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: formData,
+        });
+        const data = await res.json();
+        if (data.ok) {
+          newResults.push({ name: file.name, url: data.url });
+        } else {
+          setError(data.error || '上传失败');
+        }
+      } catch {
+        setError('网络错误');
+      }
+    }
+
+    setResults(prev => [...newResults, ...prev]);
+    setUploading(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    if (e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files);
+  };
+
+  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files?.length) uploadFiles(e.target.files);
+    e.target.value = '';
+  };
+
+  return (
+    <div className="admin-section">
+      <div className="admin-section-top">
+        <h3>图片管理</h3>
+      </div>
+      <div className="admin-card-grid" style={{ marginBottom: 16 }}>
+        <label><span>归属时刻</span>
+          <select value={selectedSlug} onChange={e => setSelectedSlug(e.target.value)}>
+            <option value="">-- 选择时刻 --</option>
+            {moments.map(m => <option key={m.slug} value={m.slug}>{m.title || m.slug}</option>)}
+          </select>
+        </label>
+      </div>
+      <div
+        className={`admin-upload-zone${dragOver ? ' drag-over' : ''}`}
+        onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={handleDrop}
+      >
+        <p>{uploading ? '上传中...' : '拖拽图片到这里，或点击选择文件'}</p>
+        <p style={{ fontSize: 11, color: 'var(--ink-soft)' }}>支持 jpg / png / webp / gif · 单张最大 10MB</p>
+        <input type="file" accept="image/*" multiple onChange={handleFileInput} style={{ marginTop: 8 }} />
+      </div>
+      {error && <div className="admin-error" style={{ marginTop: 8 }}>{error}</div>}
+      {results.length > 0 && (
+        <div className="admin-upload-results">
+          <h4>已上传 ({results.length})</h4>
+          <div className="admin-upload-grid">
+            {results.map((r, i) => (
+              <div key={i} className="admin-upload-thumb">
+                <img src={r.url} alt={r.name} />
+                <span>{r.name}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AdminPage() {
   const [token, setToken] = useState<string | null>(null);
-  const [tab, setTab] = useState<'moments' | 'honors'>('moments');
+  const [tab, setTab] = useState<'moments' | 'honors' | 'images'>('moments');
 
   useEffect(() => {
     const stored = localStorage.getItem('cms_token');
@@ -256,9 +354,11 @@ export default function AdminPage() {
       <div className="admin-tabs">
         <button className={tab === 'moments' ? 'active' : ''} onClick={() => setTab('moments')}>时光相册</button>
         <button className={tab === 'honors' ? 'active' : ''} onClick={() => setTab('honors')}>荣耀墙</button>
+        <button className={tab === 'images' ? 'active' : ''} onClick={() => setTab('images')}>图片管理</button>
       </div>
       {tab === 'moments' && <MomentEditor token={token} />}
       {tab === 'honors' && <HonorEditor token={token} />}
+      {tab === 'images' && <ImageUploader token={token} />}
     </div>
   );
 }

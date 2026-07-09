@@ -762,3 +762,54 @@ button { font-family: inherit; }
 }
 .admin-btn-save:disabled { opacity: 0.5; }
 .admin-msg { font-size: 12px; color: var(--sage-deep); letter-spacing: 1px; }
+
+/* Image Upload UI */
+.admin-upload-zone {
+  border: 2px dashed rgba(61,47,33,0.25);
+  border-radius: 4px;
+  padding: 32px 20px;
+  text-align: center;
+  color: var(--ink-soft);
+  font-size: 13px;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  background: var(--cream);
+}
+.admin-upload-zone:hover {
+  border-color: var(--warm-red);
+  background: rgba(184,74,62,0.04);
+}
+.admin-upload-zone.drag-over {
+  border-color: var(--warm-red);
+  background: rgba(184,74,62,0.08);
+  border-style: solid;
+}
+.admin-upload-zone p {
+  margin: 0 0 6px;
+}
+.admin-upload-zone small {
+  font-size: 11px;
+  color: rgba(61,47,33,0.5);
+}
+.admin-upload-results {
+  margin-top: 16px;
+}
+.admin-upload-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+.admin-upload-thumb {
+  aspect-ratio: 1;
+  border-radius: 3px;
+  overflow: hidden;
+  border: 1px solid rgba(61,47,33,0.12);
+}
+.admin-upload-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}

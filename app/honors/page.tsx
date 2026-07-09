@@ -1,7 +1,7 @@
 import Nav from '@/components/layout/Nav';
 import Footer from '@/components/layout/Footer';
 import { HONORS } from '@/data/honors';
-import { HonorMedal } from '@/components/illust/HonorMedal';
+import HonorMedal from '@/components/illust/HonorMedal';
 
 export default function Page() {
   return (

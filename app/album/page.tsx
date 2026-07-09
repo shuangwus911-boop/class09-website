@@ -1,8 +1,8 @@
 import Nav from '@/components/layout/Nav';
 import Footer from '@/components/layout/Footer';
 import { MOMENTS } from '@/data/moments';
-import Link from 'next/link';
-import { MomentCovers } from '@/components/illust/MomentCovers';
+
+import MomentCover from '@/components/illust/MomentCovers';
 
 export default function Page() {
   // Group moments by semester
@@ -28,7 +28,7 @@ export default function Page() {
             {moments.map((m) => (
               <div key={m.slug} className="album-card">
                 <div className="album-card-cover">
-                  <MomentCovers slug={m.cover} />
+                  <MomentCover slug={m.cover} />
                   <div className="moment-count">共 · {m.count} 张</div>
                 </div>
                 <div className="album-card-body">

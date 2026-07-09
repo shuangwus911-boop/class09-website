@@ -1,12 +1,21 @@
+'use client';
+
+import { useEffect, useState } from 'react';
 import Nav from '@/components/layout/Nav';
 import Footer from '@/components/layout/Footer';
-import { MOMENTS } from '@/data/moments';
-
+import { MOMENTS as FALLBACK } from '@/data/moments';
+import type { Moment } from '@/data/moments';
 import MomentCover from '@/components/illust/MomentCovers';
 
 export default function Page() {
+  const [moments, setMoments] = useState<Moment[]>(FALLBACK);
+
+  useEffect(() => {
+    fetch('/api/moments').then(r => r.ok ? r.json() : null).then(d => { if (d) setMoments(d); });
+  }, []);
+
   // Group moments by semester
-  const semesters = MOMENTS.reduce<Record<string, typeof MOMENTS>>((acc, m) => {
+  const semesters = moments.reduce<Record<string, Moment[]>>((acc, m) => {
     if (!acc[m.semester]) acc[m.semester] = [];
     acc[m.semester].push(m);
     return acc;
@@ -21,11 +30,11 @@ export default function Page() {
       </div>
       <div className="sec-note">按学期归档所有关键时刻 · 点击卡片查看详情</div>
 
-      {Object.entries(semesters).map(([semester, moments]) => (
+      {Object.entries(semesters).map(([semester, items]) => (
         <div key={semester} className="album-semester">
           <div className="album-semester-label">{semester}</div>
           <div className="album-grid">
-            {moments.map((m) => (
+            {items.map((m) => (
               <div key={m.slug} className="album-card">
                 <div className="album-card-cover">
                   <MomentCover slug={m.cover} />

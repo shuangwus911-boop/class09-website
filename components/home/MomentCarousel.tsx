@@ -46,6 +46,16 @@ export default function MomentCarousel({ moments }: Props) {
                 className={`moment${isOpen ? ' is-open' : ''}`}
                 onMouseEnter={() => setOpenId(m.slug)}
                 onMouseLeave={() => setOpenId(null)}
+                onClick={(e) => {
+                  // 手机端用点击来触发扇形展开（hover 不生效），
+                  // 第二次点击才跳转详情
+                  if (window.matchMedia('(hover: none)').matches) {
+                    if (!isOpen) {
+                      e.preventDefault();
+                      setOpenId(m.slug);
+                    }
+                  }
+                }}
               >
                 <div className={`moment-badge ${m.badgeColor ?? ''}`}>{m.date}</div>
                 <div className="moment-card">

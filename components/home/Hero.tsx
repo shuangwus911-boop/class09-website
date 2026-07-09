@@ -20,7 +20,7 @@ export default function Hero() {
         </a>
       </div>
       <div className="hero-illust">
-        <img src="/hero-class.png" alt="一（09）班全体小朋友" />
+        <img src="/hero-class.webp" alt="一（09）班全体小朋友" />
       </div>
     </div>
   );

@@ -609,18 +609,71 @@ button { font-family: inherit; }
 /* -------- Responsive -------- */
 @media (max-width: 780px) {
   .page-shell { padding: 24px 20px 32px; }
-  .hero { grid-template-columns: 1fr; }
+  .hero { grid-template-columns: 1fr; gap: 24px; }
   .hero-title { font-size: 26px; }
+  .hero-lead { font-size: 12.5px; }
+  .hero-tag { font-size: 10px; letter-spacing: 3px; }
   .honor { grid-template-columns: 1fr; padding: 24px; }
+  .honor-medal svg { width: 140px; height: 140px; }
+  .honor-title { font-size: 22px; }
   .honor-more { position: static; margin-bottom: 12px; display: inline-block; }
   .nav { position: relative; }
   .nav-links { display: none; }
   .nav-burger { display: flex; }
+  .nav-mobile { max-width: 100vw; box-sizing: border-box; }
   .moment { flex: 0 0 240px; }
   .honors-item { grid-template-columns: 1fr; }
   .honors-item-medal { flex-direction: row; gap: 12px; }
   .album-grid { grid-template-columns: 1fr 1fr; }
   .voices-grid { grid-template-columns: 1fr; }
+  .sec-title::before { left: 12px; }
+  .sec-title::after  { right: 12px; }
+  .sec-jp { font-size: 10px; letter-spacing: 3px; }
+  .sec-cn { font-size: 19px; letter-spacing: 4px; }
+  .sec-note { font-size: 11.5px; letter-spacing: 1.5px; }
+  .teacher { grid-template-columns: 1fr; padding: 26px 22px; gap: 20px; text-align: center; }
+  .teacher-portrait { margin-bottom: 4px; }
+  .teacher-avatar { width: 96px; height: 96px; }
+  .teacher-quote { font-size: 13.5px; padding-left: 22px; text-align: left; }
+  .teacher-sign { text-align: right; }
+  .teacher-more { position: static; display: inline-block; margin-top: 12px; }
+  .capsule { padding: 26px 22px; }
+  .capsule-title { font-size: 21px; letter-spacing: 2px; }
+  .capsule-lock { flex-direction: column; align-items: flex-start; gap: 14px; }
+  .capsule-cta { align-self: stretch; text-align: center; }
+  .capsule-count { position: static; display: block; text-align: right; margin-top: 12px; }
+}
+
+@media (max-width: 480px) {
+  .page-shell { padding: 20px 16px 28px; }
+  .hero { margin-bottom: 28px; gap: 18px; }
+  .hero-tag { font-size: 9.5px; letter-spacing: 2.5px; padding: 3px 10px; }
+  .hero-title { font-size: 22px; letter-spacing: 1.5px; }
+  .hero-lead { font-size: 12px; line-height: 1.9; }
+  .hero-illust { aspect-ratio: 16/11; }
+  .cta { padding: 9px 18px; font-size: 11.5px; letter-spacing: 2.5px; }
+  .brand-cn { font-size: 14px; }
+  .brand-jp { font-size: 10px; }
+  .brand-mark { width: 36px; height: 36px; font-size: 12px; }
+  .sec-title { margin: 36px 0 6px; }
+  .sec-jp { font-size: 9.5px; letter-spacing: 2.5px; }
+  .sec-cn { font-size: 17px; letter-spacing: 3px; }
+  .sec-note { font-size: 11px; }
+  .moment { flex: 0 0 220px; }
+  .moment-title { font-size: 13.5px; }
+  .moment-meta { font-size: 10.5px; }
+  .moment-quote { font-size: 11px; padding: 10px 12px; }
+  .teacher-avatar { width: 80px; height: 80px; }
+  .teacher-name { font-size: 13px; }
+  .teacher-quote { font-size: 13px; line-height: 2; }
+  .capsule { padding: 22px 18px; }
+  .capsule-title { font-size: 19px; }
+  .capsule-desc { font-size: 12.5px; }
+  .honor { padding: 20px; }
+  .honor-medal svg { width: 120px; height: 120px; }
+  .honor-title { font-size: 20px; }
+  .honors-item-medal svg { width: 80px; height: 80px; }
+  .honors-item-title { font-size: 18px; }
 }
 
 /* -------- Admin CMS -------- */

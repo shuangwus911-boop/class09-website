@@ -268,7 +268,7 @@ button { font-family: inherit; }
   padding-bottom: 2px; z-index: 3;
 }
 
-/* -------- Timeline -------- */
+/* -------- Timeline (horizontal, homepage) -------- */
 .tl {
   margin-top: 8px;
   padding: 32px 24px 20px;
@@ -355,6 +355,227 @@ button { font-family: inherit; }
 }
 .backdrop.on { opacity: 1; pointer-events: auto; }
 
+/* ============================================================
+   SUB-PAGES
+   ============================================================ */
+
+/* -------- Album page -------- */
+.album-semester { margin-bottom: 40px; }
+.album-semester-label {
+  font-size: 13px; letter-spacing: 3px; color: var(--warm-red);
+  padding: 6px 14px;
+  border-left: 3px solid var(--warm-red);
+  margin-bottom: 16px;
+  background: rgba(184,74,62,0.04);
+}
+.album-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 20px;
+}
+.album-card {
+  background: var(--cream);
+  border: 1px solid rgba(61,47,33,0.2);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+  cursor: pointer;
+}
+.album-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 16px rgba(61,47,33,0.12);
+}
+.album-card-cover {
+  aspect-ratio: 4/3;
+  background: var(--paper-2);
+  border-bottom: 1px solid rgba(61,47,33,0.12);
+  overflow: hidden;
+  position: relative;
+}
+.album-card-cover svg { width: 100%; height: 100%; display: block; }
+.album-card-body { padding: 12px 14px 14px; }
+.album-card-title { font-size: 14px; letter-spacing: 2px; margin-bottom: 4px; }
+.album-card-date { font-size: 11px; color: var(--ink-soft); letter-spacing: 1.5px; margin-bottom: 8px; }
+.album-card-quote {
+  font-size: 11px; color: var(--ink-soft); letter-spacing: 0.5px;
+  padding-top: 6px;
+  border-top: 1px dashed rgba(61,47,33,0.2);
+  line-height: 1.6;
+}
+.album-footer-note {
+  text-align: center; font-size: 12px; color: var(--ink-soft);
+  letter-spacing: 2px; padding: 32px 0 0;
+}
+
+/* -------- Honors page -------- */
+.honors-list { display: flex; flex-direction: column; gap: 28px; }
+.honors-item {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 24px;
+  padding: 28px 32px;
+  background: linear-gradient(135deg, #faf1d8, #f8edd0);
+  border: 1px solid rgba(61,47,33,0.15);
+  position: relative;
+  overflow: hidden;
+}
+.honors-item::after {
+  content: "";
+  position: absolute; top: -20px; right: -20px;
+  width: 120px; height: 120px;
+  background: radial-gradient(circle, rgba(232,181,88,0.2) 0%, transparent 70%);
+  pointer-events: none;
+}
+.honors-item-medal {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+.honors-item-medal svg { width: 100px; height: 100px; }
+.honors-item-seq {
+  margin-top: 8px; font-size: 11px; letter-spacing: 2px;
+  color: var(--gold); font-weight: 500;
+}
+.honors-item-body { position: relative; z-index: 2; }
+.honors-item-eyebrow { font-size: 11px; letter-spacing: 3px; color: var(--warm-red); margin-bottom: 8px; }
+.honors-item-title { font-size: 22px; letter-spacing: 3px; margin: 0 0 6px; font-weight: 500; }
+.honors-item-sub { font-size: 12px; color: var(--ink-soft); letter-spacing: 2px; margin-bottom: 12px; }
+.honors-item-desc { font-size: 13px; line-height: 2; letter-spacing: 1px; margin: 0 0 12px; }
+.honors-item-meta {
+  font-size: 11px; color: var(--ink-soft); letter-spacing: 2px;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(61,47,33,0.2);
+}
+.honors-empty {
+  text-align: center; font-size: 13px; color: var(--ink-soft);
+  letter-spacing: 2px; padding: 32px 0; line-height: 2;
+}
+
+/* -------- Voices page -------- */
+.voices-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 20px;
+}
+.voice-card {
+  background: var(--cream);
+  border: 1px solid rgba(61,47,33,0.18);
+  padding: 24px 20px 18px;
+  position: relative;
+  transition: transform 0.25s ease;
+}
+.voice-card:hover { transform: translateY(-2px); }
+.voice-card--red { border-top: 3px solid var(--warm-red); }
+.voice-card--green { border-top: 3px solid var(--sage-deep); }
+.voice-card--orange { border-top: 3px solid var(--warm-orange); }
+.voice-card--blue { border-top: 3px solid #5b7d8c; }
+.voice-card--purple { border-top: 3px solid #8a5b8c; }
+.voice-card-mark {
+  font-size: 36px; line-height: 1; color: var(--warm-red);
+  font-family: "Hiragino Mincho ProN", serif;
+  margin-bottom: 8px; opacity: 0.6;
+}
+.voice-card-text {
+  font-size: 14px; line-height: 2; letter-spacing: 1px;
+  margin: 0 0 14px;
+}
+.voice-card-footer {
+  display: flex; justify-content: space-between; align-items: center;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(61,47,33,0.2);
+  font-size: 11px; color: var(--ink-soft); letter-spacing: 1.5px;
+}
+.voice-card-who { font-style: italic; }
+.voice-card-from { font-size: 10px; letter-spacing: 1px; }
+.voices-note {
+  text-align: center; font-size: 12px; color: var(--ink-soft);
+  letter-spacing: 2px; padding: 32px 0 0;
+}
+
+/* -------- Timeline page (vertical) -------- */
+.tl-vertical {
+  position: relative;
+  padding-left: 40px;
+  margin: 8px 0 32px;
+}
+.tl-vertical::before {
+  content: "";
+  position: absolute;
+  left: 18px; top: 0; bottom: 0;
+  width: 2px;
+  background: repeating-linear-gradient(180deg, var(--ink) 0, var(--ink) 6px, transparent 6px, transparent 12px);
+  opacity: 0.3;
+}
+.tl-v-item {
+  position: relative;
+  padding: 0 0 36px 24px;
+}
+.tl-v-item:last-child { padding-bottom: 0; }
+.tl-v-dot {
+  position: absolute;
+  left: -31px; top: 4px;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: var(--paper-2);
+  border: 2px solid var(--ink);
+  z-index: 2;
+}
+.tl-v-item--current .tl-v-dot {
+  width: 20px; height: 20px;
+  left: -33px; top: 2px;
+  background: var(--warm-red);
+  border-color: var(--warm-red);
+  box-shadow: 0 0 0 5px rgba(184,74,62,0.15);
+  animation: tlPulse 2s ease-in-out infinite;
+}
+.tl-v-item--done .tl-v-dot {
+  background: var(--sage-deep);
+  border-color: var(--sage-deep);
+}
+.tl-v-content { min-height: 60px; }
+.tl-v-year {
+  font-size: 18px; letter-spacing: 3px; font-weight: 500;
+  margin-bottom: 2px;
+}
+.tl-v-item--current .tl-v-year { color: var(--warm-red); }
+.tl-v-grade {
+  font-size: 13px; letter-spacing: 2px; color: var(--ink-soft);
+  margin-bottom: 4px;
+}
+.tl-v-hint {
+  font-size: 12px; color: var(--ink-soft); letter-spacing: 1px;
+  margin-bottom: 10px;
+}
+.tl-v-moments {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  margin-top: 8px;
+}
+.tl-v-moment-chip {
+  font-size: 11px; letter-spacing: 1px;
+  padding: 4px 12px;
+  background: var(--paper-2);
+  border: 1px solid rgba(61,47,33,0.15);
+  color: var(--ink);
+}
+.tl-v-moment-date {
+  color: var(--warm-red);
+  margin-right: 6px;
+  font-size: 10px;
+}
+.tl-v-footer {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px dashed rgba(61,47,33,0.25);
+}
+.tl-v-footer p {
+  font-size: 12px; color: var(--ink-soft); letter-spacing: 1.5px;
+  margin: 12px 0 0; line-height: 1.8;
+}
+.tl-v-legend {
+  display: flex; gap: 20px;
+  font-size: 11px; color: var(--ink-soft); letter-spacing: 2px;
+}
+.tl-v-legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+.tl-v-legend .dot.c { background: var(--warm-red); }
+.tl-v-legend .dot.f { background: var(--paper-2); border: 1px solid var(--ink); }
+.tl-v-legend .dot.d { background: var(--sage-deep); }
+
 /* -------- Responsive -------- */
 @media (max-width: 780px) {
   .page-shell { padding: 24px 20px 32px; }
@@ -364,4 +585,8 @@ button { font-family: inherit; }
   .honor-more { position: static; margin-bottom: 12px; display: inline-block; }
   .nav-links { display: none; }
   .moment { flex: 0 0 240px; }
+  .honors-item { grid-template-columns: 1fr; }
+  .honors-item-medal { flex-direction: row; gap: 12px; }
+  .album-grid { grid-template-columns: 1fr 1fr; }
+  .voices-grid { grid-template-columns: 1fr; }
 }

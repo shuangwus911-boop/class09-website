@@ -13,5 +13,9 @@ binding = "ASSETS"
 binding = "CLASS09_CMS"
 id = "4c7d148a3102460499cd3c0a3ec22897"
 
+[[r2_buckets]]
+binding = "IMAGES"
+bucket_name = "class09-images"
+
 [vars]
 ADMIN_SECRET = "class09-admin-secret-2025"

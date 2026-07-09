@@ -75,6 +75,29 @@ button { font-family: inherit; }
 .nav-links a { cursor: pointer; transition: color 0.2s; }
 .nav-links a:hover { color: var(--warm-red); }
 
+/* Mobile nav */
+.nav-burger {
+  display: none;
+  flex-direction: column; gap: 4px;
+  padding: 8px; background: none; border: none; cursor: pointer;
+}
+.nav-burger span {
+  display: block; width: 20px; height: 2px;
+  background: var(--ink); transition: all 0.2s;
+}
+.nav-mobile {
+  position: absolute; top: 100%; left: 0; right: 0;
+  background: var(--cream);
+  border: 1px solid rgba(61,47,33,0.15);
+  border-top: none;
+  padding: 16px 20px;
+  display: flex; flex-direction: column; gap: 14px;
+  font-size: 14px; letter-spacing: 2px; color: var(--ink-soft);
+  z-index: 100;
+  box-shadow: 0 4px 12px rgba(61,47,33,0.08);
+}
+.nav-mobile a:hover { color: var(--warm-red); }
+
 /* -------- Hero -------- */
 .hero {
   display: grid;
@@ -345,6 +368,12 @@ button { font-family: inherit; }
   display: flex; align-items: center; justify-content: center;
   font-size: 11px; letter-spacing: 2px; transform: rotate(-6deg);
 }
+.foot-admin {
+  font-size: 10px; letter-spacing: 1px;
+  color: var(--ink-soft); opacity: 0.35;
+  transition: opacity 0.2s;
+}
+.foot-admin:hover { opacity: 0.8; }
 
 /* -------- Backdrop -------- */
 .backdrop {
@@ -583,7 +612,9 @@ button { font-family: inherit; }
   .hero-title { font-size: 26px; }
   .honor { grid-template-columns: 1fr; padding: 24px; }
   .honor-more { position: static; margin-bottom: 12px; display: inline-block; }
+  .nav { position: relative; }
   .nav-links { display: none; }
+  .nav-burger { display: flex; }
   .moment { flex: 0 0 240px; }
   .honors-item { grid-template-columns: 1fr; }
   .honors-item-medal { flex-direction: row; gap: 12px; }
@@ -762,3 +793,366 @@ button { font-family: inherit; }
 }
 .admin-btn-save:disabled { opacity: 0.5; }
 .admin-msg { font-size: 12px; color: var(--sage-deep); letter-spacing: 1px; }
+
+/* Image Upload UI */
+.admin-upload-zone {
+  border: 2px dashed rgba(61,47,33,0.25);
+  border-radius: 4px;
+  padding: 32px 20px;
+  text-align: center;
+  color: var(--ink-soft);
+  font-size: 13px;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  background: var(--cream);
+}
+.admin-upload-zone:hover {
+  border-color: var(--warm-red);
+  background: rgba(184,74,62,0.04);
+}
+.admin-upload-zone.drag-over {
+  border-color: var(--warm-red);
+  background: rgba(184,74,62,0.08);
+  border-style: solid;
+}
+.admin-upload-zone p {
+  margin: 0 0 6px;
+}
+.admin-upload-zone small {
+  font-size: 11px;
+  color: rgba(61,47,33,0.5);
+}
+.admin-upload-results {
+  margin-top: 16px;
+}
+.admin-upload-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+.admin-upload-thumb {
+  aspect-ratio: 1;
+  border-radius: 3px;
+  overflow: hidden;
+  border: 1px solid rgba(61,47,33,0.12);
+}
+.admin-upload-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* -------- Photo Detail Page -------- */
+.detail-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-top: 32px; margin-bottom: 8px;
+}
+.detail-back {
+  font-size: 12px; letter-spacing: 2px; color: var(--ink-soft);
+  text-decoration: none; transition: color 0.2s;
+}
+.detail-back:hover { color: var(--warm-red); }
+.detail-badge {
+  font-size: 10px; letter-spacing: 2px; padding: 3px 12px;
+  color: var(--cream);
+}
+.detail-badge--red { background: var(--warm-red); }
+.detail-badge--green { background: var(--sage-deep); }
+.detail-badge--orange { background: var(--warm-orange); }
+.detail-badge--blue { background: #5b7d8c; }
+.detail-badge--purple { background: #8a5b8c; }
+
+.detail-hero { text-align: center; margin: 24px 0 32px; }
+.detail-title {
+  font-size: 28px; letter-spacing: 4px; margin: 0 0 8px;
+  font-weight: 500;
+}
+.detail-meta {
+  display: flex; justify-content: center; gap: 12px;
+  font-size: 12px; color: var(--ink-soft); letter-spacing: 2px;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 32px;
+}
+.detail-photo {
+  position: relative;
+  border: 1px solid rgba(61,47,33,0.15);
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+.detail-photo:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 20px rgba(61,47,33,0.12);
+}
+.detail-photo img {
+  width: 100%; display: block;
+}
+.detail-photo-cap {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  padding: 20px 10px 8px;
+  background: linear-gradient(transparent, rgba(61,47,33,0.7));
+  font-size: 11px; color: var(--cream); letter-spacing: 1.5px;
+}
+
+.detail-placeholder {
+  text-align: center;
+  padding: 48px 20px;
+  border: 1px dashed rgba(61,47,33,0.2);
+  margin-bottom: 32px;
+  color: var(--ink-soft);
+}
+.detail-placeholder-icon {
+  margin-bottom: 16px; opacity: 0.4;
+}
+.detail-placeholder p {
+  margin: 0 0 6px; font-size: 13px; letter-spacing: 2px;
+}
+.detail-placeholder-hint {
+  font-size: 11px; color: rgba(61,47,33,0.5);
+}
+
+.detail-quote {
+  margin: 0 auto 32px;
+  max-width: 520px;
+  padding: 24px 28px;
+  border: 1px solid rgba(61,47,33,0.15);
+  background: var(--cream);
+  position: relative;
+}
+.detail-quote-mark {
+  font-size: 36px; line-height: 1;
+  color: var(--warm-red); opacity: 0.6;
+  font-family: "Hiragino Mincho ProN", serif;
+  margin-bottom: 8px;
+}
+.detail-quote-text {
+  font-size: 14px; line-height: 2; letter-spacing: 1px;
+  margin: 0 0 12px;
+}
+.detail-quote-footer {
+  display: flex; justify-content: space-between;
+  font-size: 11px; color: var(--ink-soft); letter-spacing: 1.5px;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(61,47,33,0.2);
+}
+
+.detail-lightbox {
+  position: fixed; inset: 0;
+  background: rgba(61,47,33,0.9);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1000; cursor: pointer;
+}
+.detail-lightbox img {
+  max-width: 90vw; max-height: 85vh;
+  object-fit: contain;
+  border: 4px solid var(--cream);
+}
+.detail-lightbox-close {
+  position: absolute; top: 20px; right: 24px;
+  width: 40px; height: 40px;
+  background: var(--cream); border: none;
+  font-size: 24px; color: var(--ink);
+  cursor: pointer; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+}
+
+.detail-empty {
+  text-align: center; padding: 60px 20px;
+  color: var(--ink-soft); letter-spacing: 2px;
+}
+.detail-empty a {
+  display: inline-block; margin-top: 12px;
+  color: var(--warm-red); font-size: 12px;
+}
+
+/* -------- 404 Page -------- */
+.not-found {
+  text-align: center;
+  padding: 80px 20px 60px;
+}
+.not-found-code {
+  font-size: 72px; font-weight: 300;
+  color: rgba(61,47,33,0.12);
+  letter-spacing: 8px;
+  margin-bottom: 12px;
+}
+.not-found-title {
+  font-size: 22px; letter-spacing: 4px;
+  font-weight: 500; margin: 0 0 16px;
+}
+.not-found-desc {
+  font-size: 13px; line-height: 2.2;
+  color: var(--ink-soft); letter-spacing: 1.5px;
+  margin: 0 0 28px;
+}
+.not-found-link {
+  display: inline-block;
+  padding: 10px 22px;
+  background: var(--warm-red); color: var(--cream);
+  font-size: 12px; letter-spacing: 3px;
+  text-decoration: none;
+  transition: opacity 0.2s;
+}
+.not-found-link:hover { opacity: 0.85; }
+
+@media (max-width: 780px) {
+  .detail-grid { grid-template-columns: 1fr 1fr; }
+  .detail-title { font-size: 22px; }
+}
+
+/* ============================================================
+   时光胶囊 · Time Capsule
+   ============================================================ */
+.capsule {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(160deg, #2b3a4a, #1c2733);
+  border: 1px solid rgba(61,47,33,0.2);
+  padding: 34px 38px;
+  color: #e8dcc0;
+  margin-top: 4px;
+}
+.capsule-stars { position: absolute; inset: 0; pointer-events: none; }
+.capsule-stars span {
+  position: absolute; border-radius: 50%; background: #f4ecd9; opacity: 0.7;
+  animation: capsule-twinkle 3s ease-in-out infinite;
+}
+@keyframes capsule-twinkle { 0%,100%{opacity:0.2} 50%{opacity:0.85} }
+.capsule::before {
+  content: ""; position: absolute; top: -40px; right: -30px;
+  width: 180px; height: 180px;
+  background: radial-gradient(circle, rgba(216,139,60,0.28), transparent 70%);
+}
+.capsule-eyebrow { position: relative; font-size: 11px; letter-spacing: 4px; color: var(--warm-orange); margin-bottom: 14px; }
+.capsule-title { position: relative; font-size: 24px; letter-spacing: 3px; margin: 0 0 10px; font-weight: 500; }
+.capsule-desc { position: relative; font-size: 13px; line-height: 2; letter-spacing: 1px; max-width: 560px; margin: 0 0 22px; opacity: 0.85; }
+.capsule-lock {
+  position: relative; display: flex; align-items: center; gap: 14px;
+  background: rgba(0,0,0,0.22); border: 1px dashed rgba(216,139,60,0.5);
+  padding: 16px 20px;
+}
+.capsule-lock-icon { font-size: 26px; }
+.capsule-lock-txt { flex: 1; }
+.capsule-lock-txt strong { display: block; font-size: 14px; letter-spacing: 2px; margin-bottom: 3px; }
+.capsule-lock-txt span { font-size: 11px; letter-spacing: 1px; opacity: 0.7; }
+.capsule-cta {
+  background: var(--warm-orange); color: #1c2733; border: none;
+  padding: 9px 18px; font-size: 12px; letter-spacing: 2px; cursor: pointer;
+  white-space: nowrap; transition: filter 0.2s;
+}
+.capsule-cta:hover { filter: brightness(1.1); }
+.capsule-count { position: absolute; bottom: 16px; right: 20px; font-size: 11px; letter-spacing: 1px; opacity: 0.6; }
+
+/* capsule page */
+.capsule-page { max-width: 680px; margin: 0 auto; }
+.capsule-hero {
+  position: relative; overflow: hidden;
+  background: linear-gradient(160deg, #2b3a4a, #1c2733);
+  color: #e8dcc0; padding: 38px 40px; text-align: center;
+}
+.capsule-hero-eyebrow { position: relative; font-size: 11px; letter-spacing: 3px; color: var(--warm-orange); margin-bottom: 12px; }
+.capsule-hero-title { position: relative; font-size: 26px; letter-spacing: 3px; margin: 0 0 12px; font-weight: 500; }
+.capsule-hero-desc { position: relative; font-size: 13px; line-height: 2; letter-spacing: 1px; opacity: 0.85; margin: 0 auto 24px; max-width: 520px; }
+.capsule-hero-stat { position: relative; display: flex; align-items: center; justify-content: center; gap: 28px; }
+.capsule-hero-stat > div { display: flex; flex-direction: column; gap: 4px; }
+.capsule-hero-stat strong { font-size: 22px; letter-spacing: 1px; color: var(--warm-orange); }
+.capsule-hero-stat span { font-size: 11px; letter-spacing: 1px; opacity: 0.7; }
+.capsule-hero-divider { width: 1px; height: 40px; background: rgba(232,220,192,0.25); }
+.capsule-form { margin-top: 24px; background: var(--cream); border: 1px solid rgba(61,47,33,0.15); padding: 28px 30px; }
+.capsule-form-lock { font-size: 12px; letter-spacing: 1px; color: var(--warm-red); background: rgba(184,74,62,0.06); border: 1px dashed rgba(184,74,62,0.4); padding: 10px 14px; margin-bottom: 20px; }
+.capsule-field { display: block; margin-bottom: 18px; }
+.capsule-field span { display: block; font-size: 12px; letter-spacing: 2px; color: var(--ink-soft); margin-bottom: 6px; }
+.capsule-field input, .capsule-field textarea {
+  width: 100%; padding: 10px 12px; border: 1px solid rgba(61,47,33,0.2);
+  background: #fff; font-family: inherit; font-size: 14px; color: var(--ink);
+  resize: vertical; line-height: 1.9;
+}
+.capsule-field input:focus, .capsule-field textarea:focus { outline: none; border-color: var(--warm-orange); }
+.capsule-seal-btn {
+  width: 100%; padding: 13px; background: #2b3a4a; color: var(--warm-orange);
+  border: none; font-size: 14px; letter-spacing: 4px; cursor: pointer; margin-top: 6px;
+  transition: filter 0.2s;
+}
+.capsule-seal-btn:hover { filter: brightness(1.15); }
+.capsule-seal-btn:disabled { opacity: 0.6; cursor: default; }
+.capsule-done { margin-top: 24px; background: var(--cream); border: 1px solid rgba(61,47,33,0.15); padding: 44px 30px; text-align: center; }
+.capsule-done-icon { font-size: 44px; margin-bottom: 12px; }
+.capsule-done h3 { font-size: 20px; letter-spacing: 3px; margin: 0 0 12px; }
+.capsule-done p { font-size: 13px; line-height: 2; color: var(--ink-soft); letter-spacing: 1px; margin: 0 0 22px; }
+.capsule-again { background: none; border: 1px solid var(--warm-red); color: var(--warm-red); padding: 9px 20px; font-size: 12px; letter-spacing: 2px; cursor: pointer; }
+
+/* ============================================================
+   班主任寄语 · From Teacher
+   ============================================================ */
+.teacher {
+  position: relative;
+  display: grid; grid-template-columns: 160px 1fr; gap: 30px;
+  background: linear-gradient(180deg, #faf1d8, #f4e4b8);
+  border: 1px solid rgba(61,47,33,0.15); padding: 34px 38px; align-items: center;
+  margin-top: 4px;
+}
+.teacher-more { position: absolute; top: 16px; right: 20px; font-size: 12px; letter-spacing: 2px; color: var(--warm-red); }
+.teacher-more:hover { text-decoration: underline; }
+.teacher-portrait { display: flex; flex-direction: column; align-items: center; }
+.teacher-avatar { width: 112px; height: 112px; border-radius: 50%; overflow: hidden; border: 1.5px solid var(--ink); }
+.teacher-avatar svg { width: 100%; height: 100%; display: block; }
+.teacher-name { margin-top: 12px; font-size: 14px; letter-spacing: 2px; }
+.teacher-role { font-size: 11px; color: var(--ink-soft); letter-spacing: 2px; margin-top: 3px; }
+.teacher-body { position: relative; }
+.teacher-eyebrow { font-size: 11px; letter-spacing: 3px; color: var(--warm-red); margin-bottom: 12px; }
+.teacher-quote { position: relative; font-size: 14px; line-height: 2.2; letter-spacing: 1px; padding-left: 24px; margin: 0; }
+.teacher-quote::before { content: "\201C"; position: absolute; left: -2px; top: -8px; font-size: 44px; color: var(--warm-red); opacity: 0.45; font-family: serif; }
+.teacher-sign { text-align: right; font-size: 12px; color: var(--ink-soft); letter-spacing: 2px; margin-top: 16px; }
+
+/* teacher page */
+.teacher-years-nav { display: flex; gap: 10px; justify-content: center; margin-bottom: 24px; }
+.teacher-year { font-size: 12px; letter-spacing: 1px; padding: 5px 16px; border: 1px solid rgba(61,47,33,0.3); background: none; color: var(--ink-soft); cursor: pointer; transition: all 0.2s; }
+.teacher-year.active { background: var(--warm-red); color: var(--cream); border-color: var(--warm-red); }
+.teacher-page {
+  display: grid; grid-template-columns: 180px 1fr; gap: 36px;
+  background: linear-gradient(180deg, #faf1d8, #f4e4b8);
+  border: 1px solid rgba(61,47,33,0.15); padding: 40px 44px; align-items: center;
+  max-width: 820px; margin: 0 auto;
+}
+.teacher-empty { text-align: center; color: var(--ink-soft); font-size: 13px; letter-spacing: 2px; padding: 60px 0; }
+
+/* ============================================================
+   班级之声 · Class Music (global floating player)
+   ============================================================ */
+.class-music {
+  position: fixed; right: 20px; bottom: 20px; z-index: 200;
+  display: flex; align-items: center; gap: 0;
+  background: var(--cream); border: 1px solid rgba(61,47,33,0.2);
+  border-radius: 40px; padding: 6px; box-shadow: 0 4px 18px rgba(61,47,33,0.18);
+  max-width: 60px; overflow: hidden; transition: max-width 0.35s ease;
+}
+.class-music.expanded { max-width: 280px; }
+.class-music-disc {
+  flex: 0 0 auto; width: 48px; height: 48px; border-radius: 50%; border: none; cursor: pointer;
+  background: radial-gradient(circle at 50% 50%, #3d2f21 0 16%, #5f7048 16% 20%, #3d2f21 20% 100%);
+  position: relative; padding: 0;
+}
+.class-music-disc.spinning { animation: music-spin 6s linear infinite; }
+@keyframes music-spin { to { transform: rotate(360deg); } }
+.class-music-disc-center { position: absolute; inset: 42%; border-radius: 50%; background: var(--warm-orange); }
+.class-music-play-badge { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 14px; color: var(--cream); }
+.class-music-info { padding: 0 16px 0 12px; cursor: pointer; white-space: nowrap; }
+.class-music-title { font-size: 13px; letter-spacing: 1px; color: var(--ink); }
+.class-music-sub { font-size: 10px; letter-spacing: 1px; color: var(--ink-soft); margin-top: 2px; }
+
+@media (max-width: 780px) {
+  .teacher, .teacher-page { grid-template-columns: 1fr; text-align: center; }
+  .teacher-quote { padding-left: 0; }
+  .teacher-quote::before { display: none; }
+  .teacher-more { position: static; display: block; margin-top: 14px; }
+  .capsule-hero-stat { gap: 18px; }
+  .class-music { right: 12px; bottom: 12px; }
+}

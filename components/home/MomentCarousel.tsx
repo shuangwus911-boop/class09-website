@@ -40,10 +40,12 @@ export default function MomentCarousel({ moments }: Props) {
           {moments.map((m) => {
             const isOpen = openId === m.slug;
             return (
-              <div
+              <a
                 key={m.slug}
+                href={`/album/${m.slug}/`}
                 className={`moment${isOpen ? ' is-open' : ''}`}
-                onClick={() => setOpenId((cur) => (cur === m.slug ? null : m.slug))}
+                onMouseEnter={() => setOpenId(m.slug)}
+                onMouseLeave={() => setOpenId(null)}
               >
                 <div className={`moment-badge ${m.badgeColor ?? ''}`}>{m.date}</div>
                 <div className="moment-card">
@@ -54,7 +56,7 @@ export default function MomentCarousel({ moments }: Props) {
                   <div className="moment-title">{m.title}</div>
                   <div className="moment-meta">
                     <span>{m.semester}</span>
-                    <span>点开展开 →</span>
+                    <span>查看详情 →</span>
                   </div>
                   {m.quote && (
                     <div className="moment-quote">
@@ -73,17 +75,15 @@ export default function MomentCarousel({ moments }: Props) {
                     </div>
                   ))}
                 </div>
-              </div>
+              </a>
             );
           })}
         </div>
       </div>
 
       <div className="hint">
-        ← 左右滑动　·　<em>点击</em>卡片让照片<em>扇形展开</em>　·　卡片底部的「」是那一天的<em>童言</em>
+        ← 左右滑动　·　<em>悬浮</em>卡片照片<em>扇形展开</em>　·　<em>点击</em>进入相册详情
       </div>
-
-      <div className={`backdrop${openId ? ' on' : ''}`} onClick={closeAll} />
     </>
   );
 }

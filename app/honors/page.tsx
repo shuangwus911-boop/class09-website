@@ -1,9 +1,19 @@
+'use client';
+
+import { useEffect, useState } from 'react';
 import Nav from '@/components/layout/Nav';
 import Footer from '@/components/layout/Footer';
-import { HONORS } from '@/data/honors';
+import { HONORS as FALLBACK } from '@/data/honors';
+import type { Honor } from '@/data/honors';
 import HonorMedal from '@/components/illust/HonorMedal';
 
 export default function Page() {
+  const [honors, setHonors] = useState<Honor[]>(FALLBACK);
+
+  useEffect(() => {
+    fetch('/api/honors').then(r => r.ok ? r.json() : null).then(d => { if (d) setHonors(d); });
+  }, []);
+
   return (
     <>
       <Nav />
@@ -14,7 +24,7 @@ export default function Page() {
       <div className="sec-note">每一次共同的高光都值得被记住</div>
 
       <div className="honors-list">
-        {HONORS.map((honor, idx) => (
+        {honors.map((honor, idx) => (
           <div key={honor.id} className="honors-item">
             <div className="honors-item-medal">
               <HonorMedal />
@@ -35,7 +45,7 @@ export default function Page() {
         ))}
       </div>
 
-      {HONORS.length === 1 && (
+      {honors.length <= 1 && (
         <div className="honors-empty">
           更多荣誉正在路上 · 我们一起加油
         </div>

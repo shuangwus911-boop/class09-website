@@ -164,9 +164,7 @@ function MomentCard({ moment, onChange, onRemove, role, onPublish, onUnpublish }
         <label><span>标题</span><input value={moment.title} onChange={e => update('title', e.target.value)} placeholder="开学第一天" /></label>
         <label><span>日期</span><input value={moment.date} onChange={e => update('date', e.target.value)} placeholder="2025.09.01" /></label>
         <label><span>学期</span><input value={moment.semester} onChange={e => update('semester', e.target.value)} placeholder="2025 秋 · 一上" /></label>
-        <label><span>slug</span><input value={moment.slug} onChange={e => update('slug', e.target.value)} placeholder="first-day" /></label>
         <label><span>照片数</span><input type="number" value={moment.count} onChange={e => update('count', parseInt(e.target.value) || 0)} /></label>
-        <label><span>封面key</span><input value={moment.cover} onChange={e => update('cover', e.target.value)} placeholder="firstDay" /></label>
         <label><span>色标</span>
           <select value={moment.badgeColor || 'red'} onChange={e => update('badgeColor', e.target.value)}>
             <option value="red">红</option><option value="green">绿</option><option value="orange">橙</option><option value="blue">蓝</option><option value="purple">紫</option>

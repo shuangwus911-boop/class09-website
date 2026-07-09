@@ -7,7 +7,7 @@ export const SITE = {
   span: '2025 — 2032',
   brandJp: 'CLASS NINE · 2025',
   brandCn: '文澜实验 · 一（09）班',
-  slogan: '与四十位小朋友，共度六个春夏秋冬。',
+  slogan: '与四十六位小朋友，共度六个春夏秋冬。',
   jpSubtitle: 'はじめまして、九組です',
   seal: '九組',
 };

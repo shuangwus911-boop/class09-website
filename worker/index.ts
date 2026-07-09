@@ -140,6 +140,26 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
 
     const path = url.pathname.replace('/api/', '');
 
+    // POST /api/bootstrap_admin (one-shot, protected by ADMIN_SECRET)
+    // Creates the站长 admin account in KV. Remove this block after deployment if desired.
+    if (path === 'bootstrap_admin' && request.method === 'POST') {
+      const authHeader = request.headers.get('Authorization') || '';
+      const provided = authHeader.replace(/^Bearer\s+/i, '').trim();
+      if (provided !== env.ADMIN_SECRET) {
+        return json({ error: 'Forbidden' }, 403);
+      }
+      const { email, password } = (await request.json()) as any;
+      if (!email || !password) return json({ error: '缺少 email 或 password' }, 400);
+      const key = `admin:${email}`;
+      const existing = await env.CLASS09_CMS.get(key);
+      if (existing) return json({ ok: true, already: true, email });
+      const hash = await sha256(password);
+      const record = JSON.stringify({ hash, role: 'admin' });
+      await env.CLASS09_CMS.put(key, record);
+      await writeLog(env.CLASS09_CMS, 'bootstrap_admin', email, 'admin account seeded');
+      return json({ ok: true, created: true, email, role: 'admin' });
+    }
+
     // POST /api/login (public)
     if (path === 'login' && request.method === 'POST') {
       const { email, password } = await request.json() as any;

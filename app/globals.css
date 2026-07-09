@@ -130,6 +130,7 @@ button { font-family: inherit; }
   overflow: hidden;
 }
 .hero-illust svg { width:100%; height:100%; display:block; }
+.hero-illust img { width:100%; height:100%; display:block; object-fit:cover; }
 
 /* -------- Carousel -------- */
 .carousel-wrap { position: relative; margin: 0 -12px; padding: 30px 12px 20px; }

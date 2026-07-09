@@ -1,5 +1,4 @@
 import { SITE } from '@/data/site';
-import HeroIllust from '@/components/illust/HeroIllust';
 
 export default function Hero() {
   return (
@@ -7,7 +6,7 @@ export default function Hero() {
       <div>
         <div className="hero-tag">A CLASS DIARY · {SITE.span}</div>
         <h1 className="hero-title">
-          与四十位小朋友，
+          与四十六位小朋友，
           <br />
           共度<em>六个</em>春夏秋冬。
         </h1>
@@ -22,7 +21,7 @@ export default function Hero() {
         </a>
       </div>
       <div className="hero-illust">
-        <HeroIllust />
+        <img src="/hero-class.png" alt="一（09）班全体小朋友" />
       </div>
     </div>
   );

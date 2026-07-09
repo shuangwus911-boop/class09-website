@@ -368,6 +368,12 @@ button { font-family: inherit; }
   display: flex; align-items: center; justify-content: center;
   font-size: 11px; letter-spacing: 2px; transform: rotate(-6deg);
 }
+.foot-admin {
+  font-size: 10px; letter-spacing: 1px;
+  color: var(--ink-soft); opacity: 0.35;
+  transition: opacity 0.2s;
+}
+.foot-admin:hover { opacity: 0.8; }
 
 /* -------- Backdrop -------- */
 .backdrop {

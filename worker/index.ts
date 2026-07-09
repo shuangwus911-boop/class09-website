@@ -164,6 +164,25 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       return json({ token, email, role });
     }
 
+    // POST /api/register (public — requires valid invite code)
+    if (path === 'register' && request.method === 'POST') {
+      const { code, email, password } = await request.json() as any;
+      if (!code || !email || !password) return json({ error: '邀请码、邮箱和密码均不能为空' }, 400);
+      const inviteRaw = await env.CLASS09_CMS.get(`invite:${code.toUpperCase()}`);
+      if (!inviteRaw) return json({ error: '邀请码无效或已过期' }, 400);
+      const invite = JSON.parse(inviteRaw);
+      // Check if email already exists
+      const existing = await env.CLASS09_CMS.get(`admin:${email}`);
+      if (existing) return json({ error: '该邮箱已注册' }, 400);
+      const hash = await sha256(password);
+      await env.CLASS09_CMS.put(`admin:${email}`, JSON.stringify({ hash, role: invite.role || 'editor' }));
+      // Delete used invite
+      await env.CLASS09_CMS.delete(`invite:${code.toUpperCase()}`);
+      const token = await createToken(email, invite.role || 'editor', env.ADMIN_SECRET);
+      await writeLog(env.CLASS09_CMS, 'register', email, `via invite ${code} (${invite.role})`);
+      return json({ ok: true, token, email, role: invite.role || 'editor' });
+    }
+
     // Public read-only endpoints
     if (request.method === 'GET') {
       if (path === 'moments') {
@@ -318,15 +337,36 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       return json({ ok: true });
     }
 
-    // POST /api/admin/create — admin creates new accounts
-    if (path === 'admin/create' && request.method === 'POST') {
-      if (user.role !== 'admin') return json({ error: '仅站长可创建账号' }, 403);
-      const { email: newEmail, password: newPass, role: newRole } = await request.json() as any;
-      if (!newEmail || !newPass) return json({ error: '邮箱和密码不能为空' }, 400);
-      if (!['admin', 'editor'].includes(newRole || 'editor')) return json({ error: '角色无效' }, 400);
-      const hash = await sha256(newPass);
-      await env.CLASS09_CMS.put(`admin:${newEmail}`, JSON.stringify({ hash, role: newRole || 'editor' }));
-      await writeLog(env.CLASS09_CMS, 'create_account', user.email, `${newEmail} (${newRole || 'editor'})`);
+    // POST /api/invite — admin generates invite code
+    if (path === 'invite' && request.method === 'POST') {
+      if (user.role !== 'admin') return json({ error: '仅站长可生成邀请码' }, 403);
+      const { role: inviteRole, note } = await request.json() as any;
+      const role = ['admin', 'editor'].includes(inviteRole) ? inviteRole : 'editor';
+      const code = Math.random().toString(36).slice(2, 8).toUpperCase();
+      const invite = { code, role, note: note || '', createdBy: user.email, createdAt: Date.now() };
+      await env.CLASS09_CMS.put(`invite:${code}`, JSON.stringify(invite), { expirationTtl: 7 * 24 * 3600 }); // 7 days
+      await writeLog(env.CLASS09_CMS, 'create_invite', user.email, `${code} (${role})`);
+      return json({ ok: true, code, role });
+    }
+
+    // GET /api/invites — admin views active invites
+    if (path === 'invites' && request.method === 'GET') {
+      if (user.role !== 'admin') return json({ error: '权限不足' }, 403);
+      const list = await env.CLASS09_CMS.list({ prefix: 'invite:', limit: 20 });
+      const invites = [];
+      for (const k of list.keys) {
+        const val = await env.CLASS09_CMS.get(k.name, 'json');
+        if (val) invites.push(val);
+      }
+      return json(invites);
+    }
+
+    // DELETE /api/invite/:code — admin revokes an invite
+    if (path.startsWith('invite/') && request.method === 'DELETE') {
+      if (user.role !== 'admin') return json({ error: '仅站长可撤销邀请码' }, 403);
+      const code = path.replace('invite/', '');
+      await env.CLASS09_CMS.delete(`invite:${code}`);
+      await writeLog(env.CLASS09_CMS, 'revoke_invite', user.email, code);
       return json({ ok: true });
     }
 

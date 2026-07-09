@@ -49,13 +49,15 @@ function useAuthFetch(token: string, onExpired: () => void) {
   }, [token, onExpired]);
 }
 
-// --- Login ---
+// --- Login + Register ---
 function AdminLogin({ onLogin }: { onLogin: (token: string, role: string) => void }) {
+  const [mode, setMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
   const [error, setError] = useState('');
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     try {
@@ -74,16 +76,56 @@ function AdminLogin({ onLogin }: { onLogin: (token: string, role: string) => voi
     }
   };
 
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    try {
+      const res = await fetch(`${API_BASE}/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: inviteCode, email, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error); return; }
+      localStorage.setItem('cms_token', data.token);
+      localStorage.setItem('cms_role', data.role || 'editor');
+      onLogin(data.token, data.role || 'editor');
+    } catch {
+      setError('网络错误');
+    }
+  };
+
   return (
     <div className="admin-login">
       <h2>班级网站管理后台</h2>
-      <p>请使用管理员账号登录</p>
-      <form onSubmit={handleSubmit}>
-        <input type="email" placeholder="邮箱" value={email} onChange={e => setEmail(e.target.value)} required />
-        <input type="password" placeholder="密码" value={password} onChange={e => setPassword(e.target.value)} required />
-        {error && <div className="admin-error">{error}</div>}
-        <button type="submit">登 录</button>
-      </form>
+      {mode === 'login' ? (
+        <>
+          <p>请使用管理员账号登录</p>
+          <form onSubmit={handleLogin}>
+            <input type="email" placeholder="邮箱" value={email} onChange={e => setEmail(e.target.value)} required />
+            <input type="password" placeholder="密码" value={password} onChange={e => setPassword(e.target.value)} required />
+            {error && <div className="admin-error">{error}</div>}
+            <button type="submit">登 录</button>
+          </form>
+          <p style={{ marginTop: 20, fontSize: 12, color: 'var(--ink-soft)' }}>
+            收到邀请码？<button onClick={() => { setMode('register'); setError(''); }} style={{ background: 'none', border: 'none', color: 'var(--warm-red)', cursor: 'pointer', fontSize: 12, letterSpacing: 1 }}>注册新账号</button>
+          </p>
+        </>
+      ) : (
+        <>
+          <p>使用站长提供的邀请码注册</p>
+          <form onSubmit={handleRegister}>
+            <input placeholder="邀请码（6位）" value={inviteCode} onChange={e => setInviteCode(e.target.value.toUpperCase())} maxLength={6} required style={{ textAlign: 'center', letterSpacing: 4, fontFamily: 'monospace' }} />
+            <input type="email" placeholder="你的邮箱" value={email} onChange={e => setEmail(e.target.value)} required />
+            <input type="password" placeholder="设置密码" value={password} onChange={e => setPassword(e.target.value)} required />
+            {error && <div className="admin-error">{error}</div>}
+            <button type="submit">注 册</button>
+          </form>
+          <p style={{ marginTop: 20, fontSize: 12, color: 'var(--ink-soft)' }}>
+            已有账号？<button onClick={() => { setMode('login'); setError(''); }} style={{ background: 'none', border: 'none', color: 'var(--warm-red)', cursor: 'pointer', fontSize: 12, letterSpacing: 1 }}>返回登录</button>
+          </p>
+        </>
+      )}
     </div>
   );
 }
@@ -426,7 +468,8 @@ function LogViewer({ token, authFetch }: { token: string; authFetch: any }) {
     login: '登录', upload: '上传图片', delete_image: '删除图片',
     update_moments: '更新相册', update_honors: '更新荣耀',
     update_quotes: '更新童言', publish_moment: '发布时刻',
-    unpublish_moment: '下架时刻', create_account: '创建账号',
+    unpublish_moment: '下架时刻', create_invite: '生成邀请码',
+    revoke_invite: '撤销邀请码', register: '注册',
   };
 
   return (
@@ -460,51 +503,98 @@ function LogViewer({ token, authFetch }: { token: string; authFetch: any }) {
   );
 }
 
-// --- Account Manager (admin only) ---
-function AccountManager({ authFetch }: { authFetch: any }) {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+// --- Invite Manager (admin only) ---
+function InviteManager({ authFetch }: { authFetch: any }) {
   const [role, setRole] = useState('editor');
+  const [note, setNote] = useState('');
   const [msg, setMsg] = useState('');
+  const [invites, setInvites] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const create = async (e: React.FormEvent) => {
+  const loadInvites = async () => {
+    try {
+      const res = await authFetch(`${API_BASE}/invites`);
+      const data = await res.json();
+      if (Array.isArray(data)) setInvites(data);
+    } catch {}
+    setLoading(false);
+  };
+
+  useEffect(() => { loadInvites(); }, [authFetch]);
+
+  const generate = async (e: React.FormEvent) => {
     e.preventDefault();
     setMsg('');
     try {
-      const res = await authFetch(`${API_BASE}/admin/create`, {
+      const res = await authFetch(`${API_BASE}/invite`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, role }),
+        body: JSON.stringify({ role, note }),
       });
       const data = await res.json();
-      if (data.ok) { setMsg(`已创建 ${email} (${role})`); setEmail(''); setPassword(''); }
-      else setMsg(data.error);
+      if (data.ok) {
+        setMsg(`邀请码：${data.code}（角色：${data.role}，7天有效）`);
+        setNote('');
+        loadInvites();
+      } else setMsg(data.error);
     } catch (e: any) { setMsg(e.message); }
+  };
+
+  const revoke = async (code: string) => {
+    if (!confirm(`撤销邀请码 ${code}？`)) return;
+    try {
+      await authFetch(`${API_BASE}/invite/${code}`, { method: 'DELETE' });
+      setInvites(invites.filter(i => i.code !== code));
+    } catch {}
   };
 
   return (
     <div className="admin-section">
-      <div className="admin-section-top"><h3>账号管理</h3></div>
-      <p className="admin-hint">创建新管理员或编辑账号。编辑(editor)可上传内容，站长(admin)可审核发布和删除。</p>
-      <form onSubmit={create} style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-        <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-          <span style={{ fontSize: 10, color: 'var(--ink-soft)', letterSpacing: 1 }}>邮箱</span>
-          <input value={email} onChange={e => setEmail(e.target.value)} placeholder="teacher@school.cn" required style={{ padding: '7px 10px', border: '1px solid rgba(61,47,33,0.2)', background: 'var(--cream)', fontSize: 13, fontFamily: 'inherit' }} />
-        </label>
-        <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-          <span style={{ fontSize: 10, color: 'var(--ink-soft)', letterSpacing: 1 }}>密码</span>
-          <input type="password" value={password} onChange={e => setPassword(e.target.value)} required style={{ padding: '7px 10px', border: '1px solid rgba(61,47,33,0.2)', background: 'var(--cream)', fontSize: 13, fontFamily: 'inherit' }} />
-        </label>
+      <div className="admin-section-top"><h3>邀请码管理</h3></div>
+      <p className="admin-hint">生成邀请码发给老师或家长，他们凭码在登录页自助注册。每个邀请码只能用一次，7天后过期。</p>
+      <form onSubmit={generate} style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 16 }}>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
           <span style={{ fontSize: 10, color: 'var(--ink-soft)', letterSpacing: 1 }}>角色</span>
           <select value={role} onChange={e => setRole(e.target.value)} style={{ padding: '7px 10px', border: '1px solid rgba(61,47,33,0.2)', background: 'var(--cream)', fontSize: 13, fontFamily: 'inherit' }}>
-            <option value="editor">编辑 (editor)</option>
-            <option value="admin">站长 (admin)</option>
+            <option value="editor">编辑 (可上传内容)</option>
+            <option value="admin">站长 (可审核发布)</option>
           </select>
         </label>
-        <button type="submit" className="admin-btn-add" style={{ height: 34 }}>创建</button>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <span style={{ fontSize: 10, color: 'var(--ink-soft)', letterSpacing: 1 }}>备注（选填）</span>
+          <input value={note} onChange={e => setNote(e.target.value)} placeholder="如：张老师" style={{ padding: '7px 10px', border: '1px solid rgba(61,47,33,0.2)', background: 'var(--cream)', fontSize: 13, fontFamily: 'inherit' }} />
+        </label>
+        <button type="submit" className="admin-btn-add" style={{ height: 34 }}>生成邀请码</button>
       </form>
-      {msg && <p className="admin-msg" style={{ marginTop: 8 }}>{msg}</p>}
+      {msg && <p style={{ fontSize: 13, color: 'var(--warm-red)', letterSpacing: 1, marginBottom: 12, fontFamily: 'monospace', background: 'rgba(184,74,62,0.06)', padding: '8px 12px', border: '1px dashed var(--warm-red)' }}>{msg}</p>}
+
+      {/* Active invites */}
+      {!loading && invites.length > 0 && (
+        <div>
+          <p style={{ fontSize: 12, color: 'var(--ink-soft)', letterSpacing: 1, marginBottom: 8 }}>待使用的邀请码：</p>
+          <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+            <thead><tr style={{ borderBottom: '1px solid rgba(61,47,33,0.15)', textAlign: 'left' }}>
+              <th style={{ padding: '6px 8px' }}>邀请码</th>
+              <th style={{ padding: '6px 8px' }}>角色</th>
+              <th style={{ padding: '6px 8px' }}>备注</th>
+              <th style={{ padding: '6px 8px' }}>生成时间</th>
+              <th style={{ padding: '6px 8px' }}></th>
+            </tr></thead>
+            <tbody>
+              {invites.map(inv => (
+                <tr key={inv.code} style={{ borderBottom: '1px solid rgba(61,47,33,0.08)' }}>
+                  <td style={{ padding: '6px 8px', fontFamily: 'monospace', letterSpacing: 2 }}>{inv.code}</td>
+                  <td style={{ padding: '6px 8px' }}>{inv.role === 'admin' ? '站长' : '编辑'}</td>
+                  <td style={{ padding: '6px 8px', color: 'var(--ink-soft)' }}>{inv.note || '-'}</td>
+                  <td style={{ padding: '6px 8px', color: 'var(--ink-soft)' }}>{new Date(inv.createdAt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</td>
+                  <td style={{ padding: '6px 8px' }}><button onClick={() => revoke(inv.code)} style={{ background: 'none', border: 'none', color: 'var(--warm-red)', cursor: 'pointer', fontSize: 11 }}>撤销</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {!loading && invites.length === 0 && <p style={{ fontSize: 12, color: 'var(--ink-soft)' }}>暂无待使用的邀请码</p>}
     </div>
   );
 }
@@ -546,13 +636,13 @@ export default function AdminPage() {
         <button className={tab === 'honors' ? 'active' : ''} onClick={() => setTab('honors')}>荣耀墙</button>
         <button className={tab === 'images' ? 'active' : ''} onClick={() => setTab('images')}>图片管理</button>
         {role === 'admin' && <button className={tab === 'logs' ? 'active' : ''} onClick={() => setTab('logs')}>操作日志</button>}
-        {role === 'admin' && <button className={tab === 'accounts' ? 'active' : ''} onClick={() => setTab('accounts')}>账号</button>}
+        {role === 'admin' && <button className={tab === 'accounts' ? 'active' : ''} onClick={() => setTab('accounts')}>邀请码</button>}
       </div>
       {tab === 'moments' && <MomentEditor token={token} role={role} authFetch={authFetch} />}
       {tab === 'honors' && <HonorEditor token={token} authFetch={authFetch} />}
       {tab === 'images' && <ImageManager token={token} role={role} authFetch={authFetch} />}
       {tab === 'logs' && role === 'admin' && <LogViewer token={token} authFetch={authFetch} />}
-      {tab === 'accounts' && role === 'admin' && <AccountManager authFetch={authFetch} />}
+      {tab === 'accounts' && role === 'admin' && <InviteManager authFetch={authFetch} />}
     </div>
   );
 }

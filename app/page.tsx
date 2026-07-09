@@ -44,14 +44,13 @@ export default function HomePage() {
         <span className="sec-jp">HONOR · 最新集体荣誉</span>
         <span className="sec-cn">最 近 的 一 束 光</span>
       </div>
-      <div className="sec-note">刚刚发生的一次集体高光　·　查看更多请去 荣耀墙</div>
       {latestHonor && <LatestHonor honor={latestHonor} />}
 
       <div className="sec-title" style={{ marginTop: 56 }}>
-        <span className="sec-jp">FROM TEACHER · 老师的话</span>
+        <span className="sec-jp">FROM TEACHER</span>
         <span className="sec-cn">班 主 任 寄 语</span>
       </div>
-      <div className="sec-note">每一学年，班主任写给孩子们的一封信</div>
+      <div className="sec-note">何老师写给孩子们的一封信</div>
       <TeacherPreview />
 
       <div className="sec-title" style={{ marginTop: 56 }}>

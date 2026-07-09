@@ -80,10 +80,6 @@ export default function MomentCarousel({ moments }: Props) {
           })}
         </div>
       </div>
-
-      <div className="hint">
-        ← 左右滑动　·　<em>悬浮</em>卡片照片<em>扇形展开</em>　·　<em>点击</em>进入相册详情
-      </div>
     </>
   );
 }

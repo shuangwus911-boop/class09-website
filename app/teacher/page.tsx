@@ -24,10 +24,10 @@ export default function Page() {
     <>
       <Nav />
       <div className="sec-title" style={{ marginTop: 40 }}>
-        <span className="sec-jp">FROM TEACHER · 老师的话</span>
+        <span className="sec-jp">FROM TEACHER</span>
         <span className="sec-cn">班 主 任 寄 语</span>
       </div>
-      <div className="sec-note">每一学年，班主任写给孩子们的一封信</div>
+      <div className="sec-note">何老师写给孩子们的一封信</div>
 
       {years.length > 1 && (
         <div className="teacher-years-nav">

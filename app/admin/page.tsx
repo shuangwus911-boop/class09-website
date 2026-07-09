@@ -602,7 +602,8 @@ function InviteManager({ authFetch }: { authFetch: any }) {
 // --- Teacher Letter Editor ---
 type TeacherLetter = {
   id: string; year: number; yearLabel: string; title: string; text: string;
-  teacher: string; role: string; date: string; featured?: boolean; status?: 'draft' | 'published';
+  teacher: string; role: string; date: string; avatar?: string;
+  featured?: boolean; status?: 'draft' | 'published';
 };
 
 function TeacherEditor({ token, role, authFetch }: { token: string; role: string; authFetch: any }) {
@@ -647,6 +648,22 @@ function TeacherEditor({ token, role, authFetch }: { token: string; role: string
     setLetters(n);
   };
 
+  const uploadAvatar = async (i: number, file: File) => {
+    const ext = file.name.split('.').pop()?.toLowerCase() || 'png';
+    const key = `avatar/${Date.now()}.${ext}`;
+    const form = new FormData();
+    form.append('file', file);
+    form.append('key', key);
+    try {
+      const res = await authFetch(`${API_BASE}/upload`, { method: 'POST', body: form });
+      const data = await res.json();
+      if (data.ok && data.url) upd(i, 'avatar', data.url);
+      else alert(data.error || '头像上传失败');
+    } catch (e: any) {
+      alert(e?.message || '头像上传失败');
+    }
+  };
+
   return (
     <div className="admin-section">
       <div className="admin-section-top">
@@ -671,6 +688,50 @@ function TeacherEditor({ token, role, authFetch }: { token: string; role: string
                 </div>
               </div>
               <div className="admin-card-grid">
+                <div className="admin-full" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                  <div style={{
+                    width: 72, height: 72, borderRadius: '50%', overflow: 'hidden',
+                    border: '1.5px solid var(--ink)', flexShrink: 0,
+                    background: 'var(--paper-2)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center'
+                  }}>
+                    {l.avatar ? (
+                      <img src={l.avatar} alt="头像" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                    ) : (
+                      <svg viewBox="0 0 120 120" style={{ width: '100%', height: '100%' }}>
+                        <rect width="120" height="120" fill="var(--paper-2)" />
+                        <circle cx="60" cy="46" r="24" fill="var(--accent)" />
+                        <path d="M22 116 Q60 70 98 116 Z" fill="var(--sage)" />
+                      </svg>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12, color: 'var(--ink-soft)' }}>
+                      <span className="admin-btn-icon" style={{ cursor: 'pointer', fontSize: 12, width: 'auto', padding: '4px 12px' }}>上传头像</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        style={{ display: 'none' }}
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) uploadAvatar(i, f);
+                          e.target.value = '';
+                        }}
+                      />
+                    </label>
+                    {l.avatar && (
+                      <button
+                        type="button"
+                        className="admin-btn-icon"
+                        style={{ fontSize: 12, width: 'auto', padding: '4px 12px', color: 'var(--warm-red)', borderColor: 'var(--warm-red)' }}
+                        onClick={() => upd(i, 'avatar', '')}
+                      >移除头像</button>
+                    )}
+                    <span style={{ fontSize: 11, color: 'var(--ink-soft)', letterSpacing: 1 }}>
+                      {l.avatar ? '已上传（首页圆形裁切显示）' : '未上传，将显示默认占位图'}
+                    </span>
+                  </div>
+                </div>
                 <label><span>学年</span><input type="number" value={l.year} onChange={e => upd(i, 'year', parseInt(e.target.value) || l.year)} /></label>
                 <label><span>学年标签</span><input value={l.yearLabel} onChange={e => upd(i, 'yearLabel', e.target.value)} placeholder="2025 学年 · 一年级" /></label>
                 <label><span>标题</span><input value={l.title} onChange={e => upd(i, 'title', e.target.value)} placeholder="致我亲爱的孩子们" /></label>

@@ -22,11 +22,15 @@ export default function TeacherPreview() {
       <Link href="/teacher" className="teacher-more">看 历 年 寄 语 →</Link>
       <div className="teacher-portrait">
         <div className="teacher-avatar">
-          <svg viewBox="0 0 120 120">
-            <rect width="120" height="120" fill="var(--paper-2)" />
-            <circle cx="60" cy="46" r="24" fill="var(--accent)" />
-            <path d="M22 116 Q60 70 98 116 Z" fill="var(--sage)" />
-          </svg>
+          {letter.avatar ? (
+            <img src={letter.avatar} alt={letter.teacher} />
+          ) : (
+            <svg viewBox="0 0 120 120">
+              <rect width="120" height="120" fill="var(--paper-2)" />
+              <circle cx="60" cy="46" r="24" fill="var(--accent)" />
+              <path d="M22 116 Q60 70 98 116 Z" fill="var(--sage)" />
+            </svg>
+          )}
         </div>
         <div className="teacher-name">{letter.teacher}</div>
         <div className="teacher-role">{letter.role}</div>

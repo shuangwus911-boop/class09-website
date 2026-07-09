@@ -1159,7 +1159,7 @@ button { font-family: inherit; }
 .teacher-more:hover { text-decoration: underline; }
 .teacher-portrait { display: flex; flex-direction: column; align-items: center; }
 .teacher-avatar { width: 112px; height: 112px; border-radius: 50%; overflow: hidden; border: 1.5px solid var(--ink); }
-.teacher-avatar svg { width: 100%; height: 100%; display: block; }
+.teacher-avatar svg, .teacher-avatar img { width: 100%; height: 100%; display: block; object-fit: cover; }
 .teacher-name { margin-top: 12px; font-size: 14px; letter-spacing: 2px; }
 .teacher-role { font-size: 11px; color: var(--ink-soft); letter-spacing: 2px; margin-top: 3px; }
 .teacher-body { position: relative; }

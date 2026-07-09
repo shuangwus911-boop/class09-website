@@ -6,5 +6,9 @@ compatibility_date = "2024-09-23"
 directory = "./out"
 binding = "ASSETS"
 
+[[kv_namespaces]]
+binding = "CLASS09_CMS"
+id = "4c7d148a3102460499cd3c0a3ec22897"
+
 [vars]
 ADMIN_SECRET = "class09-admin-secret-2025"

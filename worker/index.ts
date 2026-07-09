@@ -58,73 +58,77 @@ export default {
 };
 
 async function handleApi(request: Request, env: Env, url: URL): Promise<Response> {
-  if (!env.CLASS09_CMS) {
-    return json({ error: 'CMS 尚未配置，请先绑定 KV namespace' }, 503);
+  try {
+    if (!env.CLASS09_CMS) {
+      return json({ error: 'CMS 尚未配置，请先绑定 KV namespace' }, 503);
+    }
+
+    const path = url.pathname.replace('/api/', '');
+
+    // POST /api/login
+    if (path === 'login' && request.method === 'POST') {
+      const { email, password } = await request.json() as any;
+      // Check against stored admin credentials
+      const storedHash = await env.CLASS09_CMS.get(`admin:${email}`);
+      if (!storedHash) return json({ error: '账号不存在' }, 401);
+
+      const inputHash = await sha256(password);
+      if (inputHash !== storedHash) return json({ error: '密码错误' }, 401);
+
+      const token = createToken(email, env.ADMIN_SECRET);
+      return json({ token, email });
+    }
+
+    // All other routes require auth
+    const authHeader = request.headers.get('Authorization');
+    const token = authHeader?.replace('Bearer ', '');
+    if (!token) return json({ error: '未登录' }, 401);
+    const user = verifyToken(token, env.ADMIN_SECRET);
+    if (!user) return json({ error: '登录已过期' }, 401);
+
+    // GET /api/moments - list all moments
+    if (path === 'moments' && request.method === 'GET') {
+      const data = await env.CLASS09_CMS.get('moments', 'json');
+      return json(data || []);
+    }
+
+    // PUT /api/moments - save all moments
+    if (path === 'moments' && request.method === 'PUT') {
+      const body = await request.json();
+      await env.CLASS09_CMS.put('moments', JSON.stringify(body));
+      return json({ ok: true });
+    }
+
+    // GET /api/honors - list all honors
+    if (path === 'honors' && request.method === 'GET') {
+      const data = await env.CLASS09_CMS.get('honors', 'json');
+      return json(data || []);
+    }
+
+    // PUT /api/honors - save all honors
+    if (path === 'honors' && request.method === 'PUT') {
+      const body = await request.json();
+      await env.CLASS09_CMS.put('honors', JSON.stringify(body));
+      return json({ ok: true });
+    }
+
+    // GET /api/quotes - list all quotes
+    if (path === 'quotes' && request.method === 'GET') {
+      const data = await env.CLASS09_CMS.get('quotes', 'json');
+      return json(data || []);
+    }
+
+    // PUT /api/quotes - save quotes
+    if (path === 'quotes' && request.method === 'PUT') {
+      const body = await request.json();
+      await env.CLASS09_CMS.put('quotes', JSON.stringify(body));
+      return json({ ok: true });
+    }
+
+    return json({ error: 'Not found' }, 404);
+  } catch (e: any) {
+    return json({ error: 'Internal error', message: e?.message || String(e) }, 500);
   }
-
-  const path = url.pathname.replace('/api/', '');
-
-  // POST /api/login
-  if (path === 'login' && request.method === 'POST') {
-    const { email, password } = await request.json() as any;
-    // Check against stored admin credentials
-    const storedHash = await env.CLASS09_CMS.get(`admin:${email}`);
-    if (!storedHash) return json({ error: '账号不存在' }, 401);
-
-    const inputHash = await sha256(password);
-    if (inputHash !== storedHash) return json({ error: '密码错误' }, 401);
-
-    const token = createToken(email, env.ADMIN_SECRET);
-    return json({ token, email });
-  }
-
-  // All other routes require auth
-  const authHeader = request.headers.get('Authorization');
-  const token = authHeader?.replace('Bearer ', '');
-  if (!token) return json({ error: '未登录' }, 401);
-  const user = verifyToken(token, env.ADMIN_SECRET);
-  if (!user) return json({ error: '登录已过期' }, 401);
-
-  // GET /api/moments - list all moments
-  if (path === 'moments' && request.method === 'GET') {
-    const data = await env.CLASS09_CMS.get('moments', 'json');
-    return json(data || []);
-  }
-
-  // PUT /api/moments - save all moments
-  if (path === 'moments' && request.method === 'PUT') {
-    const body = await request.json();
-    await env.CLASS09_CMS.put('moments', JSON.stringify(body));
-    return json({ ok: true });
-  }
-
-  // GET /api/honors - list all honors
-  if (path === 'honors' && request.method === 'GET') {
-    const data = await env.CLASS09_CMS.get('honors', 'json');
-    return json(data || []);
-  }
-
-  // PUT /api/honors - save all honors
-  if (path === 'honors' && request.method === 'PUT') {
-    const body = await request.json();
-    await env.CLASS09_CMS.put('honors', JSON.stringify(body));
-    return json({ ok: true });
-  }
-
-  // GET /api/quotes - list all quotes
-  if (path === 'quotes' && request.method === 'GET') {
-    const data = await env.CLASS09_CMS.get('quotes', 'json');
-    return json(data || []);
-  }
-
-  // PUT /api/quotes - save quotes
-  if (path === 'quotes' && request.method === 'PUT') {
-    const body = await request.json();
-    await env.CLASS09_CMS.put('quotes', JSON.stringify(body));
-    return json({ ok: true });
-  }
-
-  return json({ error: 'Not found' }, 404);
 }
 
 async function sha256(message: string): Promise<string> {

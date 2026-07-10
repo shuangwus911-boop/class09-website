@@ -70,7 +70,7 @@ export default function MomentCarousel({ moments }: Props) {
                 <div className="fan">
                   {m.photos.slice(0, 5).map((p, idx) => (
                     <div key={p.id} className="fan-photo">
-                      <FanPhoto slug={m.slug} idx={idx} />
+                      <FanPhoto slug={m.slug} idx={idx} src={p.src} />
                       <div className="cap">{p.caption}</div>
                     </div>
                   ))}

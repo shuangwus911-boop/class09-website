@@ -1,9 +1,20 @@
-// 扇形展开时展示的照片占位插画（每个 slug 五张）
-type Props = { slug: string; idx: number };
+// 扇形展开时展示的照片（支持真实图片，无图时显示 SVG 占位）
+type Props = { slug: string; idx: number; src?: string };
 
-export default function FanPhoto({ slug, idx }: Props) {
-  const key = `${slug}-${idx}`;
-  // 简化处理：不同 slug 用不同色调，五张按 idx 变体
+export default function FanPhoto({ slug, idx, src }: Props) {
+  // 有真实图片就用 img
+  if (src) {
+    return (
+      <img
+        src={src}
+        alt=""
+        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+        loading="lazy"
+      />
+    );
+  }
+
+  // 无图时的 SVG 占位
   const palettes: Record<string, string[]> = {
     'first-day': ['#f0d8a8', '#d8e0b8', '#f4e8c8', '#e8d8b8', '#f0dcc8'],
     'mid-autumn': ['#3d3a5c', '#e8b558', '#f0dcc8', '#5f7048', '#b84a3e'],
@@ -17,7 +28,6 @@ export default function FanPhoto({ slug, idx }: Props) {
   return (
     <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
       <rect width="100" height="100" fill={bg} />
-      {/* 简易场景元素做区分 */}
       {idx === 0 && (
         <g>
           <rect x="15" y="30" width="70" height="55" fill="rgba(255,255,255,0.4)" stroke="#3d2f21" strokeWidth="0.8" />

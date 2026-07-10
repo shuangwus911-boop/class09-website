@@ -539,33 +539,68 @@ function InviteManager({ authFetch }: { authFetch: any }) {
       </form>
       {msg && <p style={{ fontSize: 13, color: 'var(--warm-red)', letterSpacing: 1, marginBottom: 12, fontFamily: 'monospace', background: 'rgba(184,74,62,0.06)', padding: '8px 12px', border: '1px dashed var(--warm-red)' }}>{msg}</p>}
 
-      {/* Active invites */}
       {!loading && invites.length > 0 && (
         <div>
-          <p style={{ fontSize: 12, color: 'var(--ink-soft)', letterSpacing: 1, marginBottom: 8 }}>待使用的邀请码：</p>
-          <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
-            <thead><tr style={{ borderBottom: '1px solid rgba(61,47,33,0.15)', textAlign: 'left' }}>
-              <th style={{ padding: '6px 8px' }}>邀请码</th>
-              <th style={{ padding: '6px 8px' }}>角色</th>
-              <th style={{ padding: '6px 8px' }}>备注</th>
-              <th style={{ padding: '6px 8px' }}>生成时间</th>
-              <th style={{ padding: '6px 8px' }}></th>
-            </tr></thead>
-            <tbody>
-              {invites.map(inv => (
-                <tr key={inv.code} style={{ borderBottom: '1px solid rgba(61,47,33,0.08)' }}>
-                  <td style={{ padding: '6px 8px', fontFamily: 'monospace', letterSpacing: 2 }}>{inv.code}</td>
-                  <td style={{ padding: '6px 8px' }}>{inv.role === 'admin' ? '站长' : '编辑'}</td>
-                  <td style={{ padding: '6px 8px', color: 'var(--ink-soft)' }}>{inv.note || '-'}</td>
-                  <td style={{ padding: '6px 8px', color: 'var(--ink-soft)' }}>{new Date(inv.createdAt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</td>
-                  <td style={{ padding: '6px 8px' }}><button onClick={() => revoke(inv.code)} style={{ background: 'none', border: 'none', color: 'var(--warm-red)', cursor: 'pointer', fontSize: 11 }}>撤销</button></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {/* Used invites */}
+          {invites.filter(i => i.usedBy).length > 0 && (
+            <>
+              <p style={{ fontSize: 12, color: 'var(--ink-soft)', letterSpacing: 1, marginBottom: 8 }}>已使用的邀请码：</p>
+              <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse', marginBottom: 20 }}>
+                <thead><tr style={{ borderBottom: '1px solid rgba(61,47,33,0.15)', textAlign: 'left' }}>
+                  <th style={{ padding: '6px 8px' }}>邀请码</th>
+                  <th style={{ padding: '6px 8px' }}>角色</th>
+                  <th style={{ padding: '6px 8px' }}>注册账号</th>
+                  <th style={{ padding: '6px 8px' }}>登录次数</th>
+                  <th style={{ padding: '6px 8px' }}>最后登录</th>
+                  <th style={{ padding: '6px 8px' }}></th>
+                </tr></thead>
+                <tbody>
+                  {invites.filter(i => i.usedBy).map(inv => (
+                    <tr key={inv.code} style={{ borderBottom: '1px solid rgba(61,47,33,0.08)', background: 'rgba(138,153,104,0.05)' }}>
+                      <td style={{ padding: '6px 8px', fontFamily: 'monospace', letterSpacing: 2 }}>{inv.code}</td>
+                      <td style={{ padding: '6px 8px' }}>{inv.role === 'admin' ? '站长' : '编辑'}</td>
+                      <td style={{ padding: '6px 8px', fontFamily: 'monospace', fontSize: 11 }}>{inv.usedBy}</td>
+                      <td style={{ padding: '6px 8px' }}>{inv.userLoginCount ?? '—'}</td>
+                      <td style={{ padding: '6px 8px', color: 'var(--ink-soft)', fontSize: 11 }}>
+                        {inv.userLastLogin ? new Date(inv.userLastLogin).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '从未登录'}
+                      </td>
+                      <td style={{ padding: '6px 8px' }}><button onClick={() => revoke(inv.code)} style={{ background: 'none', border: 'none', color: 'var(--warm-red)', cursor: 'pointer', fontSize: 11 }}>撤销</button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
+
+          {/* Unused invites */}
+          {invites.filter(i => !i.usedBy).length > 0 && (
+            <>
+              <p style={{ fontSize: 12, color: 'var(--ink-soft)', letterSpacing: 1, marginBottom: 8 }}>待使用的邀请码：</p>
+              <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+                <thead><tr style={{ borderBottom: '1px solid rgba(61,47,33,0.15)', textAlign: 'left' }}>
+                  <th style={{ padding: '6px 8px' }}>邀请码</th>
+                  <th style={{ padding: '6px 8px' }}>角色</th>
+                  <th style={{ padding: '6px 8px' }}>备注</th>
+                  <th style={{ padding: '6px 8px' }}>生成时间</th>
+                  <th style={{ padding: '6px 8px' }}></th>
+                </tr></thead>
+                <tbody>
+                  {invites.filter(i => !i.usedBy).map(inv => (
+                    <tr key={inv.code} style={{ borderBottom: '1px solid rgba(61,47,33,0.08)' }}>
+                      <td style={{ padding: '6px 8px', fontFamily: 'monospace', letterSpacing: 2 }}>{inv.code}</td>
+                      <td style={{ padding: '6px 8px' }}>{inv.role === 'admin' ? '站长' : '编辑'}</td>
+                      <td style={{ padding: '6px 8px', color: 'var(--ink-soft)' }}>{inv.note || '-'}</td>
+                      <td style={{ padding: '6px 8px', color: 'var(--ink-soft)' }}>{new Date(inv.createdAt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</td>
+                      <td style={{ padding: '6px 8px' }}><button onClick={() => revoke(inv.code)} style={{ background: 'none', border: 'none', color: 'var(--warm-red)', cursor: 'pointer', fontSize: 11 }}>撤销</button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
         </div>
       )}
-      {!loading && invites.length === 0 && <p style={{ fontSize: 12, color: 'var(--ink-soft)' }}>暂无待使用的邀请码</p>}
+      {!loading && invites.length === 0 && <p style={{ fontSize: 12, color: 'var(--ink-soft)' }}>暂无邀请码</p>}
     </div>
   );
 }

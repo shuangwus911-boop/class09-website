@@ -178,6 +178,11 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
 
       const inputHash = await sha256(password);
       if (inputHash !== storedHash) return json({ error: '密码错误' }, 401);
+      // Update login stats (async, don't block response)
+      const now = Date.now();
+      let loginCount = 1;
+      try { const u = JSON.parse(stored); loginCount = (u.loginCount || 0) + 1; } catch {}
+      env.CLASS09_CMS.put(`admin:${email}`, JSON.stringify({ ...JSON.parse(stored), hash: storedHash, role, loginCount, lastLogin: now })).catch(() => {});
       const token = await createToken(email, role, env.ADMIN_SECRET);
       await writeLog(env.CLASS09_CMS, 'login', email);
       return json({ token, email, role });
@@ -194,9 +199,12 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       const existing = await env.CLASS09_CMS.get(`admin:${email}`);
       if (existing) return json({ error: '该邮箱已注册' }, 400);
       const hash = await sha256(password);
-      await env.CLASS09_CMS.put(`admin:${email}`, JSON.stringify({ hash, role: invite.role || 'editor' }));
-      // Delete used invite
-      await env.CLASS09_CMS.delete(`invite:${code.toUpperCase()}`);
+      const userRecord = { hash, role: invite.role || 'editor', inviteCode: code, createdAt: Date.now(), loginCount: 0, lastLogin: null as number | null };
+      await env.CLASS09_CMS.put(`admin:${email}`, JSON.stringify(userRecord));
+      // Mark invite as used (keep for tracking, don't delete)
+      invite.usedBy = email;
+      invite.usedAt = Date.now();
+      await env.CLASS09_CMS.put(`invite:${code}`, JSON.stringify(invite), { expirationTtl: 7 * 24 * 3600 });
       const token = await createToken(email, invite.role || 'editor', env.ADMIN_SECRET);
       await writeLog(env.CLASS09_CMS, 'register', email, `via invite ${code} (${invite.role})`);
       return json({ ok: true, token, email, role: invite.role || 'editor' });
@@ -461,14 +469,24 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       return json({ ok: true, code, role });
     }
 
-    // GET /api/invites — admin views active invites
+    // GET /api/invites — admin views active invites with user login stats
     if (path === 'invites' && request.method === 'GET') {
       if (user.role !== 'admin') return json({ error: '权限不足' }, 403);
-      const list = await env.CLASS09_CMS.list({ prefix: 'invite:', limit: 20 });
+      const list = await env.CLASS09_CMS.list({ prefix: 'invite:', limit: 50 });
       const invites = [];
       for (const k of list.keys) {
         const val = await env.CLASS09_CMS.get(k.name, 'json');
-        if (val) invites.push(val);
+        if (!val) continue;
+        const invite: any = val;
+        // If used, look up user record for login stats
+        if (invite.usedBy) {
+          const userData = await env.CLASS09_CMS.get(`admin:${invite.usedBy}`, 'json') as any;
+          if (userData) {
+            invite.userLoginCount = userData.loginCount || 0;
+            invite.userLastLogin = userData.lastLogin || null;
+          }
+        }
+        invites.push(invite);
       }
       return json(invites);
     }

@@ -20,7 +20,6 @@ export default function ClassMusic() {
     return sessionStorage.getItem('class09_music_hidden') !== '1';
   });
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const lastTimeRef = useRef(0);
 
   useEffect(() => {
     fetch('/api/music')
@@ -31,7 +30,7 @@ export default function ClassMusic() {
       .catch(() => {});
   }, []);
 
-  // Restore playback position and auto-play if was playing before
+  // Restore playback on page load
   useEffect(() => {
     if (!cfg || !audioRef.current) return;
     const el = audioRef.current;
@@ -40,48 +39,54 @@ export default function ClassMusic() {
     const wasPlaying = sessionStorage.getItem(STORAGE_KEY) === '1';
     const savedTime = sessionStorage.getItem('class09_music_time');
 
-    if (wasPlaying) {
-      if (savedTime) el.currentTime = parseFloat(savedTime);
-      el.play().then(() => {
-        setPlaying(true);
-        setNeedTap(false);
-      }).catch(() => setNeedTap(true));
+    if (wasPlaying && savedTime) {
+      el.currentTime = parseFloat(savedTime);
     }
+
+    // Try to play (will fail without user gesture on fresh load)
+    el.play().then(() => {
+      setPlaying(true);
+      setNeedTap(false);
+    }).catch(() => {
+      setNeedTap(wasPlaying); // show ♪ if was playing before
+    });
   }, [cfg]);
 
-  // Save play state on toggle
+  // Save play state on change
   useEffect(() => {
     sessionStorage.setItem(STORAGE_KEY, playing ? '1' : '0');
   }, [playing]);
 
-  // Save currentTime periodically
+  // Save currentTime while playing
   useEffect(() => {
     if (!playing || !audioRef.current) return;
     const iv = setInterval(() => {
       if (audioRef.current) {
         sessionStorage.setItem('class09_music_time', String(audioRef.current.currentTime));
       }
-    }, 1000);
+    }, 2000);
     return () => clearInterval(iv);
   }, [playing]);
 
-  // Try auto-play on first user interaction
+  // Wait for first user interaction to auto-play
   useEffect(() => {
-    if (!cfg || !audioRef.current) return;
-    const wasPlaying = sessionStorage.getItem(STORAGE_KEY) === '1';
-    if (wasPlaying) return; // already handled above
     const kick = async () => {
-      try {
-        await audioRef.current!.play();
-        setPlaying(true);
-        setNeedTap(false);
-      } catch {}
+      if (!audioRef.current || !visible) return;
+      if (audioRef.current.paused) {
+        try {
+          await audioRef.current.play();
+          setPlaying(true);
+          setNeedTap(false);
+        } catch {}
+      }
+    };
+    window.addEventListener('pointerdown', kick);
+    window.addEventListener('keydown', kick);
+    return () => {
       window.removeEventListener('pointerdown', kick);
       window.removeEventListener('keydown', kick);
     };
-    window.addEventListener('pointerdown', kick, { once: true });
-    window.addEventListener('keydown', kick, { once: true });
-  }, [cfg]);
+  }, [visible]);
 
   const src = cfg?.src || '/bgm.m4a';
 
@@ -121,7 +126,7 @@ export default function ClassMusic() {
 
   return (
     <>
-      <audio ref={audioRef} src={src} loop preload="none" />
+      <audio ref={audioRef} src={src} loop preload="auto" />
       {visible && (
         <button
           className={`class-music-disc${playing ? ' spinning' : ''}`}
@@ -131,7 +136,7 @@ export default function ClassMusic() {
           title={playing ? '暂停音乐（右键关闭）' : '播放音乐（右键关闭）'}
         >
           <span className="class-music-disc-center" />
-          {!playing && <span className="class-music-play-badge">{needTap ? '♪' : '▶'}</span>}
+          {(!playing || needTap) && <span className="class-music-play-badge">{needTap ? '♪' : '▶'}</span>}
         </button>
       )}
       {!visible && (

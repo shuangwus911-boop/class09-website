@@ -9,12 +9,18 @@ type MusicConfig = {
   enabled?: boolean;
 };
 
+const STORAGE_KEY = 'class09_music_playing';
+
 export default function ClassMusic() {
   const [cfg, setCfg] = useState<MusicConfig | null>(null);
   const [playing, setPlaying] = useState(false);
   const [needTap, setNeedTap] = useState(false);
-  const [visible, setVisible] = useState(true);
+  const [visible, setVisible] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    return sessionStorage.getItem('class09_music_hidden') !== '1';
+  });
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const lastTimeRef = useRef(0);
 
   useEffect(() => {
     fetch('/api/music')
@@ -25,30 +31,56 @@ export default function ClassMusic() {
       .catch(() => {});
   }, []);
 
+  // Restore playback position and auto-play if was playing before
   useEffect(() => {
     if (!cfg || !audioRef.current) return;
     const el = audioRef.current;
     el.volume = 0.4;
-    const tryPlay = async () => {
-      try {
-        await el.play();
+
+    const wasPlaying = sessionStorage.getItem(STORAGE_KEY) === '1';
+    const savedTime = sessionStorage.getItem('class09_music_time');
+
+    if (wasPlaying) {
+      if (savedTime) el.currentTime = parseFloat(savedTime);
+      el.play().then(() => {
         setPlaying(true);
-      } catch {
-        setNeedTap(true);
-        const kick = async () => {
-          try {
-            await el.play();
-            setPlaying(true);
-            setNeedTap(false);
-          } catch {}
-          window.removeEventListener('pointerdown', kick);
-          window.removeEventListener('keydown', kick);
-        };
-        window.addEventListener('pointerdown', kick, { once: true });
-        window.addEventListener('keydown', kick, { once: true });
+        setNeedTap(false);
+      }).catch(() => setNeedTap(true));
+    }
+  }, [cfg]);
+
+  // Save play state on toggle
+  useEffect(() => {
+    sessionStorage.setItem(STORAGE_KEY, playing ? '1' : '0');
+  }, [playing]);
+
+  // Save currentTime periodically
+  useEffect(() => {
+    if (!playing || !audioRef.current) return;
+    const iv = setInterval(() => {
+      if (audioRef.current) {
+        sessionStorage.setItem('class09_music_time', String(audioRef.current.currentTime));
       }
+    }, 1000);
+    return () => clearInterval(iv);
+  }, [playing]);
+
+  // Try auto-play on first user interaction
+  useEffect(() => {
+    if (!cfg || !audioRef.current) return;
+    const wasPlaying = sessionStorage.getItem(STORAGE_KEY) === '1';
+    if (wasPlaying) return; // already handled above
+    const kick = async () => {
+      try {
+        await audioRef.current!.play();
+        setPlaying(true);
+        setNeedTap(false);
+      } catch {}
+      window.removeEventListener('pointerdown', kick);
+      window.removeEventListener('keydown', kick);
     };
-    tryPlay();
+    window.addEventListener('pointerdown', kick, { once: true });
+    window.addEventListener('keydown', kick, { once: true });
   }, [cfg]);
 
   const src = cfg?.src || '/bgm.m4a';
@@ -73,12 +105,17 @@ export default function ClassMusic() {
     if (el) { el.pause(); el.currentTime = 0; }
     setPlaying(false);
     setVisible(false);
+    sessionStorage.setItem('class09_music_hidden', '1');
   };
 
   const reopen = () => {
     setVisible(true);
+    sessionStorage.setItem('class09_music_hidden', '0');
     if (audioRef.current) {
-      audioRef.current.play().then(() => setPlaying(true)).catch(() => setNeedTap(true));
+      audioRef.current.play().then(() => {
+        setPlaying(true);
+        setNeedTap(false);
+      }).catch(() => setNeedTap(true));
     }
   };
 

@@ -49,6 +49,17 @@ function useAuthFetch(token: string, onExpired: () => void) {
   }, [token, onExpired]);
 }
 
+// --- Shared: move deleted item to trash KV ---
+async function trashToKV(authFetch: any, type: string, data: any, name: string, slug?: string) {
+  try {
+    await authFetch(`${API_BASE}/trash`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type, data, name, slug }),
+    });
+  } catch {}
+}
+
 // --- Login + Register ---
 function AdminLogin({ onLogin }: { onLogin: (token: string, role: string) => void }) {
   const [mode, setMode] = useState<'login' | 'register'>('login');
@@ -205,10 +216,8 @@ function MomentCard({ moment, onChange, onRemove, role, onPublish, onUnpublish, 
                     {p.caption || '无标题'}
                   </div>
                 )}
-                {role === 'admin' && (
-                  <button onClick={() => onDeletePhoto(idx)}
-                    style={{ position: 'absolute', top: 2, right: 2, width: 18, height: 18, background: 'var(--warm-red)', color: '#fff', border: 'none', borderRadius: '50%', fontSize: 11, cursor: 'pointer', lineHeight: '16px' }}>×</button>
-                )}
+                <button onClick={() => onDeletePhoto(idx)}
+                  style={{ position: 'absolute', top: 2, right: 2, width: 18, height: 18, background: 'var(--warm-red)', color: '#fff', border: 'none', borderRadius: '50%', fontSize: 11, cursor: 'pointer', lineHeight: '16px' }}>×</button>
               </div>
             ))}
           </div>
@@ -304,6 +313,8 @@ function MomentEditor({ token, role, authFetch }: { token: string; role: string;
     const m = moments[momentIdx];
     const photo = m.photos[photoIdx];
     if (!confirm(`删除图片「${photo.caption || photo.id}」？`)) return;
+    // Save to trash before deleting
+    await trashToKV(authFetch, 'moment_photo', photo, photo.caption || photo.id, m.slug);
     if (photo.src) {
       const r2key = photo.src.replace('/images/', '');
       try { await authFetch(`${API_BASE}/images/${r2key}`, { method: 'DELETE' }); } catch {}
@@ -879,11 +890,86 @@ function CapsuleSettings({ authFetch }: { authFetch: any }) {
   );
 }
 
+// --- Trash / Recycle Bin Viewer (admin only) ---
+function TrashViewer({ token, authFetch }: { token: string; authFetch: any }) {
+  const [items, setItems] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [msg, setMsg] = useState('');
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const res = await authFetch(`${API_BASE}/trash`);
+      const data = await res.json();
+      if (Array.isArray(data)) setItems(data);
+    } catch {}
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, [token]);
+
+  const restore = async (id: string) => {
+    try {
+      await authFetch(`${API_BASE}/trash/${id}`, { method: 'PUT' });
+      setMsg('已恢复');
+      setItems(items.filter(i => i.id !== id));
+    } catch (e: any) { setMsg(e.message); }
+    setTimeout(() => setMsg(''), 2000);
+  };
+
+  const permDelete = async (id: string) => {
+    if (!confirm('确定永久删除？此操作不可恢复')) return;
+    try {
+      await authFetch(`${API_BASE}/trash/${id}`, { method: 'DELETE' });
+      setItems(items.filter(i => i.id !== id));
+    } catch (e: any) { setMsg(e.message); }
+    setTimeout(() => setMsg(''), 2000);
+  };
+
+  const typeLabels: Record<string, string> = {
+    moment_photo: '时刻照片', moment: '时刻', honor: '荣誉',
+    teacher_letter: '寄语',
+  };
+
+  const truncateName = (name: string) => name.length > 20 ? name.slice(0, 18) + '…' : name;
+
+  return (
+    <div className="admin-section">
+      <div className="admin-section-top">
+        <h3>回收站 <span className="admin-count">{items.length}</span></h3>
+        <button className="admin-btn-add" onClick={load} disabled={loading}>{loading ? '刷新中...' : '刷新'}</button>
+      </div>
+      <p className="admin-hint">所有编辑删除的内容都会先进入回收站，站长可以在这里恢复或彻底删除。恢复后会回到原来的位置。</p>
+      {items.length === 0 && <p className="admin-empty">回收站为空</p>}
+      <div className="admin-card-list">
+        {items.map(item => (
+          <div key={item.id} className="admin-card" style={{ borderLeft: '3px solid var(--badge-orange)' }}>
+            <div className="admin-card-header">
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <span className="admin-card-badge" style={{ background: 'var(--badge-orange)' }}>{typeLabels[item.type] || item.type}</span>
+                <span style={{ fontSize: 12, letterSpacing: 1 }}>{truncateName(item.name || '(空)')}</span>
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--ink-soft)', letterSpacing: 1 }}>
+                {item.deleted_by} · {new Date(item.deleted_at).toLocaleString('zh-CN')}
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', padding: '8px 0 0' }}>
+              <button className="admin-btn-icon" onClick={() => restore(item.id)} title="恢复" style={{ width: 'auto', padding: '4px 14px', fontSize: 12, color: 'var(--sage-deep)', borderColor: 'var(--sage-deep)' }}>恢复</button>
+              <button className="admin-btn-icon" onClick={() => permDelete(item.id)} title="永久删除" style={{ width: 'auto', padding: '4px 14px', fontSize: 12, color: 'var(--warm-red)', borderColor: 'var(--warm-red)' }}>永久删除</button>
+            </div>
+          </div>
+        ))}
+      </div>
+      {msg && <span className="admin-msg">{msg}</span>}
+    </div>
+  );
+}
+
 // --- Main Page ---
 export default function AdminPage() {
   const [token, setToken] = useState<string | null>(null);
   const [role, setRole] = useState<string>('admin');
-  const [tab, setTab] = useState<'moments' | 'honors' | 'teacher' | 'capsule' | 'music' | 'logs' | 'accounts'>('moments');
+  const [tab, setTab] = useState<'moments' | 'honors' | 'teacher' | 'capsule' | 'music' | 'trash' | 'logs' | 'accounts'>('moments');
 
   const logout = useCallback(() => {
     localStorage.removeItem('cms_token');
@@ -920,6 +1006,7 @@ export default function AdminPage() {
         <button className={tab === 'teacher' ? 'active' : ''} onClick={() => setTab('teacher')}>班主任寄语</button>
         <button className={tab === 'capsule' ? 'active' : ''} onClick={() => setTab('capsule')}>时光胶囊</button>
         <button className={tab === 'music' ? 'active' : ''} onClick={() => setTab('music')}>班级之声</button>
+        {role === 'admin' && <button className={tab === 'trash' ? 'active' : ''} onClick={() => setTab('trash')}>回收站</button>}
         {role === 'admin' && <button className={tab === 'logs' ? 'active' : ''} onClick={() => setTab('logs')}>操作日志</button>}
         {role === 'admin' && <button className={tab === 'accounts' ? 'active' : ''} onClick={() => setTab('accounts')}>邀请码</button>}
       </div>
@@ -928,6 +1015,7 @@ export default function AdminPage() {
       {tab === 'teacher' && <TeacherEditor token={token} role={role} authFetch={authFetch} />}
       {tab === 'capsule' && <CapsuleSettings authFetch={authFetch} />}
       {tab === 'music' && <MusicManager authFetch={authFetch} />}
+      {tab === 'trash' && role === 'admin' && <TrashViewer token={token} authFetch={authFetch} />}
       {tab === 'logs' && role === 'admin' && <LogViewer token={token} authFetch={authFetch} />}
       {tab === 'accounts' && role === 'admin' && <InviteManager authFetch={authFetch} />}
     </div>

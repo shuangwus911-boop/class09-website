@@ -141,22 +141,22 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     const path = url.pathname.replace('/api/', '');
 
     // POST /api/bootstrap_admin (one-shot, protected by ADMIN_SECRET)
-    // Creates or FORCE-PROMOTES the站长 admin account in KV to role=admin.
-    // Remove this block after deployment if desired.
+    // Creates or FORCE-PROMOTES an account in KV. Supports optional role (admin | editor, default admin).
     if (path === 'bootstrap_admin' && request.method === 'POST') {
       const authHeader = request.headers.get('Authorization') || '';
       const provided = authHeader.replace(/^Bearer\s+/i, '').trim();
       if (provided !== env.ADMIN_SECRET) {
         return json({ error: 'Forbidden' }, 403);
       }
-      const { email, password } = (await request.json()) as any;
+      const { email, password, role: reqRole } = (await request.json()) as any;
       if (!email || !password) return json({ error: '缺少 email 或 password' }, 400);
+      const role = ['admin', 'editor'].includes(reqRole) ? reqRole : 'admin';
       const key = `admin:${email}`;
       const hash = await sha256(password);
-      const record = JSON.stringify({ hash, role: 'admin' });
+      const record = JSON.stringify({ hash, role });
       await env.CLASS09_CMS.put(key, record);
-      await writeLog(env.CLASS09_CMS, 'bootstrap_admin', email, 'admin account seeded/promoted');
-      return json({ ok: true, email, role: 'admin' });
+      await writeLog(env.CLASS09_CMS, 'bootstrap_admin', email, `account seeded/promoted as ${role}`);
+      return json({ ok: true, email, role });
     }
 
     // POST /api/login (public)
@@ -479,6 +479,81 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       const code = path.replace('invite/', '');
       await env.CLASS09_CMS.delete(`invite:${code}`);
       await writeLog(env.CLASS09_CMS, 'revoke_invite', user.email, code);
+      return json({ ok: true });
+    }
+
+    // --- Trash / Recycle Bin (admin only) ---
+
+    // POST /api/trash — save an item to trash (any authenticated user)
+    if (path === 'trash' && request.method === 'POST') {
+      const body = await request.json();
+      const { type, slug, data, name } = body as any;
+      if (!type || !data) return json({ error: '缺少 type 或 data' }, 400);
+      const id = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const item = {
+        type, slug: slug || '', name: name || '',
+        data, deleted_by: user.email, deleted_at: Date.now(),
+      };
+      await env.CLASS09_CMS.put(`trash:${id}`, JSON.stringify(item));
+      await writeLog(env.CLASS09_CMS, 'trash_item', user.email, `${id} (${type}: ${name})`);
+      return json({ ok: true, id });
+    }
+
+    // GET /api/trash — list all trashed items
+    if (path === 'trash' && request.method === 'GET') {
+      if (user.role !== 'admin') return json({ error: '仅站长可查看回收站' }, 403);
+      const list = await env.CLASS09_CMS.list({ prefix: 'trash:', limit: 100 });
+      const items = [];
+      for (const k of list.keys) {
+        const val = await env.CLASS09_CMS.get(k.name, 'json');
+        if (val) items.push({ id: k.name.replace('trash:', ''), ...val });
+      }
+      items.sort((a, b) => (b.deleted_at || 0) - (a.deleted_at || 0));
+      return json(items);
+    }
+
+    // PUT /api/trash/:id — restore an item
+    if (path.startsWith('trash/') && request.method === 'PUT') {
+      if (user.role !== 'admin') return json({ error: '仅站长可恢复' }, 403);
+      const id = path.replace('trash/', '');
+      const key = `trash:${id}`;
+      const item = await env.CLASS09_CMS.get(key, 'json') as any;
+      if (!item) return json({ error: '记录不存在或已过期' }, 404);
+
+      // Restore based on type
+      if (item.type === 'moment_photo') {
+        const moments = await env.CLASS09_CMS.get('moments', 'json') as any[] || [];
+        const m = moments.find((x: any) => x.slug === item.slug);
+        if (m) {
+          m.photos = m.photos || [];
+          m.photos.push(item.data);
+          m.count = m.photos.length;
+          await env.CLASS09_CMS.put('moments', JSON.stringify(moments));
+        }
+      } else if (item.type === 'moment') {
+        const moments = await env.CLASS09_CMS.get('moments', 'json') as any[] || [];
+        moments.push(item.data);
+        await env.CLASS09_CMS.put('moments', JSON.stringify(moments));
+      } else if (item.type === 'honor') {
+        const honors = await env.CLASS09_CMS.get('honors', 'json') as any[] || [];
+        honors.push(item.data);
+        await env.CLASS09_CMS.put('honors', JSON.stringify(honors));
+      }
+
+      await env.CLASS09_CMS.delete(key);
+      await writeLog(env.CLASS09_CMS, 'restore_trash', user.email, `${id} (${item.type})`);
+      return json({ ok: true });
+    }
+
+    // DELETE /api/trash/:id — permanently delete a trashed item
+    if (path.startsWith('trash/') && request.method === 'DELETE') {
+      if (user.role !== 'admin') return json({ error: '仅站长可彻底删除' }, 403);
+      const id = path.replace('trash/', '');
+      const key = `trash:${id}`;
+      const item = await env.CLASS09_CMS.get(key, 'json') as any;
+      if (!item) return json({ error: '记录不存在' }, 404);
+      await env.CLASS09_CMS.delete(key);
+      await writeLog(env.CLASS09_CMS, 'perm_delete_trash', user.email, `${id} (${item.type})`);
       return json({ ok: true });
     }
 

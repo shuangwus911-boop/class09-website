@@ -3,16 +3,17 @@
 import { useEffect, useRef, useState } from 'react';
 
 type MusicConfig = {
-  src: string;        // /images/xxx.mp3
-  title: string;      // 曲名
-  subtitle?: string;  // 副标题
-  enabled?: boolean;  // 是否启用
+  src: string;
+  title: string;
+  subtitle?: string;
+  enabled?: boolean;
 };
 
 export default function ClassMusic() {
   const [cfg, setCfg] = useState<MusicConfig | null>(null);
   const [playing, setPlaying] = useState(false);
   const [needTap, setNeedTap] = useState(false);
+  const [visible, setVisible] = useState(true);
   const [expanded, setExpanded] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -25,8 +26,6 @@ export default function ClassMusic() {
       .catch(() => {});
   }, []);
 
-  // Try silent-autoplay once config is ready. Browsers usually block audio
-  // autoplay, so we fall back to "tap to play".
   useEffect(() => {
     if (!cfg || !audioRef.current) return;
     const el = audioRef.current;
@@ -37,7 +36,6 @@ export default function ClassMusic() {
         setPlaying(true);
       } catch {
         setNeedTap(true);
-        // Start on the first user interaction anywhere on the page
         const kick = async () => {
           try {
             await el.play();
@@ -54,7 +52,7 @@ export default function ClassMusic() {
     tryPlay();
   }, [cfg]);
 
-  if (!cfg) return null;
+  if (!cfg || !visible) return null;
 
   const toggle = async () => {
     const el = audioRef.current;
@@ -71,24 +69,39 @@ export default function ClassMusic() {
     }
   };
 
+  const stop = () => {
+    const el = audioRef.current;
+    if (el) { el.pause(); el.currentTime = 0; }
+    setPlaying(false);
+    setVisible(false);
+  };
+
   return (
-    <div className={`class-music${expanded ? ' expanded' : ''}`}>
+    <>
       <audio ref={audioRef} src={cfg.src} loop preload="auto" />
-      <button
-        className={`class-music-disc${playing ? ' spinning' : ''}`}
-        onClick={toggle}
-        aria-label={playing ? '暂停班级之声' : '播放班级之声'}
-        onMouseEnter={() => setExpanded(true)}
-        onMouseLeave={() => setExpanded(false)}
-        title={cfg.title}
-      >
-        <span className="class-music-disc-center" />
-        {!playing && <span className="class-music-play-badge">{needTap ? '♪' : '▶'}</span>}
-      </button>
-      <div className="class-music-info" onClick={toggle}>
-        <div className="class-music-title">{cfg.title}</div>
-        {cfg.subtitle && <div className="class-music-sub">{cfg.subtitle}</div>}
+      <div className={`class-music${expanded ? ' expanded' : ''}`}>
+        <button
+          className={`class-music-disc${playing ? ' spinning' : ''}`}
+          onClick={toggle}
+          aria-label={playing ? '暂停' : '播放'}
+          onMouseEnter={() => setExpanded(true)}
+          onMouseLeave={() => setExpanded(false)}
+          title={cfg.title}
+        >
+          <span className="class-music-disc-center" />
+          {!playing && <span className="class-music-play-badge">{needTap ? '♪' : '▶'}</span>}
+        </button>
+        <div className="class-music-info" onClick={toggle}>
+          <div className="class-music-title">{cfg.title}</div>
+          {cfg.subtitle && <div className="class-music-sub">{cfg.subtitle}</div>}
+        </div>
+        <button
+          className="class-music-close"
+          onClick={(e) => { e.stopPropagation(); stop(); }}
+          aria-label="关闭音乐"
+          title="关闭音乐"
+        >×</button>
       </div>
-    </div>
+    </>
   );
 }

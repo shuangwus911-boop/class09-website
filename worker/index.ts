@@ -347,8 +347,10 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       if (!allowed.includes(file.type)) {
         return json({ error: '仅支持 jpg/png/webp/gif 图片或 mp3/m4a/ogg/wav 音频格式' }, 400);
       }
-      if (file.size > 20 * 1024 * 1024) {
-        return json({ error: '文件大小不能超过 20MB' }, 400);
+      const isAudio = file.type.startsWith('audio/');
+      const maxSize = isAudio ? 10 * 1024 * 1024 : 2 * 1024 * 1024;
+      if (file.size > maxSize) {
+        return json({ error: isAudio ? '音频文件不能超过 10MB' : '图片文件不能超过 2MB，请先压缩后再上传' }, 400);
       }
 
       await env.IMAGES.put(key, file.stream(), {

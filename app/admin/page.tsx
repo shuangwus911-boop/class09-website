@@ -441,7 +441,7 @@ function ImageManager({ token, role, authFetch }: { token: string; role: string;
         onClick={() => document.getElementById('file-input')?.click()}
       >
         <p>{uploading ? '上传中...' : '拖拽图片到这里，或点击选择文件'}</p>
-        <small>支持 jpg / png / webp / gif · 单张最大 10MB</small>
+        <small>支持 jpg / png / webp / gif · 单张 ≤2MB（建议先压缩到 500KB 以内，加载更快）</small>
         <input id="file-input" type="file" accept="image/*" multiple onChange={e => { if (e.target.files?.length) uploadFiles(e.target.files); e.target.value = ''; }} style={{ display: 'none' }} />
       </div>
       {error && <div className="admin-error" style={{ marginTop: 8 }}>{error}</div>}

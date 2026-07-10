@@ -131,13 +131,15 @@ function AdminLogin({ onLogin }: { onLogin: (token: string, role: string) => voi
 }
 
 // --- Moment Card with status ---
-function MomentCard({ moment, onChange, onRemove, role, onPublish, onUnpublish }: {
+function MomentCard({ moment, onChange, onRemove, role, onPublish, onUnpublish, onUploadPhoto, onDeletePhoto }: {
   moment: Moment;
   onChange: (m: Moment) => void;
   onRemove: () => void;
   role: string;
   onPublish: () => void;
   onUnpublish: () => void;
+  onUploadPhoto: (file: File) => void;
+  onDeletePhoto: (idx: number) => void;
 }) {
   const update = (field: string, value: any) => onChange({ ...moment, [field]: value });
   const updateQuote = (field: string, value: string) => {
@@ -145,6 +147,15 @@ function MomentCard({ moment, onChange, onRemove, role, onPublish, onUnpublish }
     onChange({ ...moment, quote: { ...q, [field]: value } });
   };
   const isDraft = moment.status === 'draft';
+  const photos = moment.photos || [];
+
+  const handleFile = (file: File) => {
+    if (file.size > 2 * 1024 * 1024) {
+      alert(`图片「${file.name}」超过 2MB（当前 ${(file.size/1024/1024).toFixed(1)}MB），请先压缩后再上传`);
+      return;
+    }
+    onUploadPhoto(file);
+  };
 
   return (
     <div className="admin-card" style={isDraft ? { borderLeft: '3px solid var(--warm-orange)' } : {}}>
@@ -171,6 +182,42 @@ function MomentCard({ moment, onChange, onRemove, role, onPublish, onUnpublish }
           </select>
         </label>
       </div>
+
+      {/* 照片管理区 */}
+      <div style={{ marginTop: 12, padding: '12px 0', borderTop: '1px dashed rgba(61,47,33,0.15)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+          <span style={{ fontSize: 12, color: 'var(--ink-soft)', letterSpacing: 1 }}>照片 ({photos.length} 张)</span>
+          <label style={{ cursor: 'pointer' }}>
+            <span className="admin-btn-icon" style={{ fontSize: 11, width: 'auto', padding: '3px 12px' }}>+ 上传照片</span>
+            <input type="file" accept="image/*" multiple style={{ display: 'none' }}
+              onChange={e => {
+                if (e.target.files) { Array.from(e.target.files).forEach(f => handleFile(f)); e.target.value = ''; }
+              }}
+            />
+          </label>
+        </div>
+        {photos.length > 0 && (
+          <div className="admin-upload-grid">
+            {photos.map((p, idx) => (
+              <div key={p.id || idx} className="admin-upload-thumb" style={{ position: 'relative' }}>
+                {p.src ? <img src={p.src} alt={p.caption || ''} /> : (
+                  <div style={{ width: '100%', height: '100%', background: 'var(--paper-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--ink-soft)' }}>
+                    {p.caption || '无标题'}
+                  </div>
+                )}
+                {role === 'admin' && (
+                  <button onClick={() => onDeletePhoto(idx)}
+                    style={{ position: 'absolute', top: 2, right: 2, width: 18, height: 18, background: 'var(--warm-red)', color: '#fff', border: 'none', borderRadius: '50%', fontSize: 11, cursor: 'pointer', lineHeight: '16px' }}>×</button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        <small style={{ display: 'block', marginTop: 6, fontSize: 10.5, color: 'var(--ink-soft)', letterSpacing: 0.5 }}>
+          支持 jpg/png/webp · 单张 ≤2MB · 建议先压缩到 500KB 以内
+        </small>
+      </div>
+
       <details className="admin-card-detail">
         <summary>童言 (选填)</summary>
         <div className="admin-card-grid">
@@ -230,6 +277,43 @@ function MomentEditor({ token, role, authFetch }: { token: string; role: string;
     } catch {}
   };
 
+  const uploadPhoto = async (momentIdx: number, file: File) => {
+    const m = moments[momentIdx];
+    const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+    const key = `${m.slug}/${Date.now()}-${Math.random().toString(36).slice(2, 6)}.${ext}`;
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('key', key);
+    try {
+      const res = await authFetch(`${API_BASE}/upload`, { method: 'POST', body: formData });
+      const data = await res.json();
+      if (data.ok && data.url) {
+        const newPhoto = { id: key.split('/').pop()?.replace(/\.\w+$/, '') || `p-${Date.now()}`, caption: file.name.replace(/\.\w+$/, ''), src: data.url };
+        const updated = [...moments];
+        updated[momentIdx] = { ...m, photos: [...m.photos, newPhoto], count: (m.count || 0) + 1 };
+        setMoments(updated);
+      } else {
+        alert(data.error || '上传失败');
+      }
+    } catch (e: any) {
+      if (e.message !== '登录已过期') alert('网络错误');
+    }
+  };
+
+  const deletePhoto = async (momentIdx: number, photoIdx: number) => {
+    const m = moments[momentIdx];
+    const photo = m.photos[photoIdx];
+    if (!confirm(`删除图片「${photo.caption || photo.id}」？`)) return;
+    if (photo.src) {
+      const r2key = photo.src.replace('/images/', '');
+      try { await authFetch(`${API_BASE}/images/${r2key}`, { method: 'DELETE' }); } catch {}
+    }
+    const photos = m.photos.filter((_, i) => i !== photoIdx);
+    const updated = [...moments];
+    updated[momentIdx] = { ...m, photos, count: photos.length };
+    setMoments(updated);
+  };
+
   const drafts = moments.filter(m => m.status === 'draft');
   const published = moments.filter(m => m.status !== 'draft');
 
@@ -247,6 +331,8 @@ function MomentEditor({ token, role, authFetch }: { token: string; role: string;
             onRemove={() => { if (confirm('删除「' + (m.title || '未命名') + '」？')) setMoments(moments.filter((_, j) => j !== i)); }}
             onPublish={() => publish(m.slug)}
             onUnpublish={() => unpublish(m.slug)}
+            onUploadPhoto={(file: File) => uploadPhoto(i, file)}
+            onDeletePhoto={(photoIdx: number) => deletePhoto(i, photoIdx)}
           />
         ))}
         {moments.length === 0 && <p className="admin-empty">暂无数据，点击上方按钮添加第一个时刻</p>}
@@ -322,132 +408,6 @@ function HonorEditor({ token, authFetch }: { token: string; authFetch: any }) {
   );
 }
 
-// --- Image Manager (shows existing + upload + delete for admin) ---
-function ImageManager({ token, role, authFetch }: { token: string; role: string; authFetch: any }) {
-  const [moments, setMoments] = useState<Moment[]>([]);
-  const [selectedSlug, setSelectedSlug] = useState('');
-  const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState('');
-  const [dragOver, setDragOver] = useState(false);
-
-  useEffect(() => {
-    fetch(`${API_BASE}/moments?all=1`, { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.json()).then(d => { if (Array.isArray(d)) setMoments(d); });
-  }, [token]);
-
-  const selectedMoment = moments.find(m => m.slug === selectedSlug);
-  const existingPhotos = selectedMoment?.photos || [];
-
-  const uploadFiles = async (files: FileList | File[]) => {
-    if (!selectedSlug) { setError('请先选择归属时刻'); return; }
-    setError('');
-    setUploading(true);
-    const newPhotos: { id: string; caption: string; src: string }[] = [];
-
-    for (const file of Array.from(files)) {
-      const ext = file.name.split('.').pop() || 'jpg';
-      const key = `${selectedSlug}/${Date.now()}-${Math.random().toString(36).slice(2, 6)}.${ext}`;
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('key', key);
-
-      try {
-        const res = await authFetch(`${API_BASE}/upload`, { method: 'POST', body: formData });
-        const data = await res.json();
-        if (data.ok) {
-          newPhotos.push({ id: key.split('/').pop()?.replace(/\.\w+$/, '') || `p-${Date.now()}`, caption: file.name.replace(/\.\w+$/, ''), src: data.url });
-        } else {
-          setError(data.error || '上传失败');
-        }
-      } catch (e: any) {
-        if (e.message !== '登录已过期') setError('网络错误');
-      }
-    }
-
-    if (newPhotos.length > 0) {
-      const updated = moments.map(m => {
-        if (m.slug !== selectedSlug) return m;
-        return { ...m, photos: [...m.photos, ...newPhotos], count: m.count + newPhotos.length };
-      });
-      setMoments(updated);
-      await authFetch(`${API_BASE}/moments`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updated),
-      }).catch(() => {});
-    }
-    setUploading(false);
-  };
-
-  const deletePhoto = async (photo: any, idx: number) => {
-    if (!confirm(`删除图片「${photo.caption || photo.id}」？此操作不可恢复`)) return;
-    // Delete from R2 if it has src path
-    if (photo.src) {
-      const key = photo.src.replace('/images/', '');
-      try { await authFetch(`${API_BASE}/images/${key}`, { method: 'DELETE' }); } catch {}
-    }
-    // Remove from moment data
-    const updated = moments.map(m => {
-      if (m.slug !== selectedSlug) return m;
-      const photos = m.photos.filter((_, i) => i !== idx);
-      return { ...m, photos, count: photos.length };
-    });
-    setMoments(updated);
-    await authFetch(`${API_BASE}/moments`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updated),
-    }).catch(() => {});
-  };
-
-  return (
-    <div className="admin-section">
-      <div className="admin-section-top"><h3>图片管理</h3></div>
-      <div className="admin-card-grid" style={{ marginBottom: 16 }}>
-        <label><span>归属时刻</span>
-          <select value={selectedSlug} onChange={e => setSelectedSlug(e.target.value)}>
-            <option value="">-- 选择时刻 --</option>
-            {moments.map(m => <option key={m.slug} value={m.slug}>{m.title || m.slug} ({m.photos?.length || 0}张)</option>)}
-          </select>
-        </label>
-      </div>
-
-      {/* Existing photos */}
-      {selectedSlug && existingPhotos.length > 0 && (
-        <div style={{ marginBottom: 16 }}>
-          <p style={{ fontSize: 12, color: 'var(--ink-soft)', letterSpacing: 1, marginBottom: 8 }}>已有 {existingPhotos.length} 张照片</p>
-          <div className="admin-upload-grid">
-            {existingPhotos.map((p, i) => (
-              <div key={i} className="admin-upload-thumb" style={{ position: 'relative' }}>
-                {p.src ? <img src={p.src} alt={p.caption} /> : <div style={{ width: '100%', height: '100%', background: 'var(--paper-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10 }}>{p.caption || p.id}</div>}
-                {role === 'admin' && (
-                  <button onClick={() => deletePhoto(p, i)} style={{ position: 'absolute', top: 2, right: 2, width: 18, height: 18, background: 'var(--warm-red)', color: '#fff', border: 'none', borderRadius: '50%', fontSize: 11, cursor: 'pointer', lineHeight: '16px' }}>×</button>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-      {selectedSlug && existingPhotos.length === 0 && (
-        <p style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 12 }}>该时刻暂无照片</p>
-      )}
-
-      {/* Upload zone */}
-      <div
-        className={`admin-upload-zone${dragOver ? ' drag-over' : ''}`}
-        onDragOver={e => { e.preventDefault(); setDragOver(true); }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={e => { e.preventDefault(); setDragOver(false); if (e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files); }}
-        onClick={() => document.getElementById('file-input')?.click()}
-      >
-        <p>{uploading ? '上传中...' : '拖拽图片到这里，或点击选择文件'}</p>
-        <small>支持 jpg / png / webp / gif · 单张 ≤2MB（建议先压缩到 500KB 以内，加载更快）</small>
-        <input id="file-input" type="file" accept="image/*" multiple onChange={e => { if (e.target.files?.length) uploadFiles(e.target.files); e.target.value = ''; }} style={{ display: 'none' }} />
-      </div>
-      {error && <div className="admin-error" style={{ marginTop: 8 }}>{error}</div>}
-    </div>
-  );
-}
 
 // --- Log Viewer (admin only) ---
 function LogViewer({ token, authFetch }: { token: string; authFetch: any }) {
@@ -923,7 +883,7 @@ function CapsuleSettings({ authFetch }: { authFetch: any }) {
 export default function AdminPage() {
   const [token, setToken] = useState<string | null>(null);
   const [role, setRole] = useState<string>('admin');
-  const [tab, setTab] = useState<'moments' | 'honors' | 'teacher' | 'capsule' | 'music' | 'images' | 'logs' | 'accounts'>('moments');
+  const [tab, setTab] = useState<'moments' | 'honors' | 'teacher' | 'capsule' | 'music' | 'logs' | 'accounts'>('moments');
 
   const logout = useCallback(() => {
     localStorage.removeItem('cms_token');
@@ -960,7 +920,6 @@ export default function AdminPage() {
         <button className={tab === 'teacher' ? 'active' : ''} onClick={() => setTab('teacher')}>班主任寄语</button>
         <button className={tab === 'capsule' ? 'active' : ''} onClick={() => setTab('capsule')}>时光胶囊</button>
         <button className={tab === 'music' ? 'active' : ''} onClick={() => setTab('music')}>班级之声</button>
-        <button className={tab === 'images' ? 'active' : ''} onClick={() => setTab('images')}>图片管理</button>
         {role === 'admin' && <button className={tab === 'logs' ? 'active' : ''} onClick={() => setTab('logs')}>操作日志</button>}
         {role === 'admin' && <button className={tab === 'accounts' ? 'active' : ''} onClick={() => setTab('accounts')}>邀请码</button>}
       </div>
@@ -969,7 +928,6 @@ export default function AdminPage() {
       {tab === 'teacher' && <TeacherEditor token={token} role={role} authFetch={authFetch} />}
       {tab === 'capsule' && <CapsuleSettings authFetch={authFetch} />}
       {tab === 'music' && <MusicManager authFetch={authFetch} />}
-      {tab === 'images' && <ImageManager token={token} role={role} authFetch={authFetch} />}
       {tab === 'logs' && role === 'admin' && <LogViewer token={token} authFetch={authFetch} />}
       {tab === 'accounts' && role === 'admin' && <InviteManager authFetch={authFetch} />}
     </div>

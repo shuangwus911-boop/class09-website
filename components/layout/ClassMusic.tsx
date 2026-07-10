@@ -14,7 +14,6 @@ export default function ClassMusic() {
   const [playing, setPlaying] = useState(false);
   const [needTap, setNeedTap] = useState(false);
   const [visible, setVisible] = useState(true);
-  const [expanded, setExpanded] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
@@ -52,6 +51,11 @@ export default function ClassMusic() {
     tryPlay();
   }, [cfg]);
 
+  // Determine actual src: KV > public fallback
+  const src = cfg?.src || '/bgm.m4a';
+  const title = cfg?.title || '童话梦想家';
+  const subtitle = cfg?.subtitle || '圈圈宝贝';
+
   const toggle = async () => {
     const el = audioRef.current;
     if (!el) return;
@@ -81,27 +85,23 @@ export default function ClassMusic() {
     }
   };
 
-  if (!cfg) return null;
-
   return (
     <>
-      <audio ref={audioRef} src={cfg.src} loop preload="auto" />
+      <audio ref={audioRef} src={src} loop preload="none" />
       {visible && (
-        <div className={`class-music${expanded ? ' expanded' : ''}`}>
+        <div className="class-music">
           <button
             className={`class-music-disc${playing ? ' spinning' : ''}`}
             onClick={toggle}
             aria-label={playing ? '暂停' : '播放'}
-            onMouseEnter={() => setExpanded(true)}
-            onMouseLeave={() => setExpanded(false)}
-            title={cfg.title}
+            title={title}
           >
             <span className="class-music-disc-center" />
             {!playing && <span className="class-music-play-badge">{needTap ? '♪' : '▶'}</span>}
           </button>
           <div className="class-music-info" onClick={toggle}>
-            <div className="class-music-title">{cfg.title}</div>
-            {cfg.subtitle && <div className="class-music-sub">{cfg.subtitle}</div>}
+            <div className="class-music-title">{title}</div>
+            <div className="class-music-sub">{subtitle}</div>
           </div>
           <button
             className="class-music-close"

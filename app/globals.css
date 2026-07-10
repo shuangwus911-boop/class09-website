@@ -1199,12 +1199,10 @@ button { font-family: inherit; }
    ============================================================ */
 .class-music {
   position: fixed; right: 20px; bottom: 20px; z-index: 200;
-  display: flex; align-items: center; gap: 0;
+  display: flex; align-items: center; gap: 6px;
   background: var(--cream); border: 1px solid rgba(61,47,33,0.2);
-  border-radius: 40px; padding: 6px; box-shadow: 0 4px 18px rgba(61,47,33,0.18);
-  max-width: 60px; overflow: hidden; transition: max-width 0.35s ease;
+  border-radius: 40px; padding: 6px 12px 6px 6px; box-shadow: 0 4px 18px rgba(61,47,33,0.18);
 }
-.class-music.expanded { max-width: 280px; }
 .class-music-disc {
   flex: 0 0 auto; width: 48px; height: 48px; border-radius: 50%; border: none; cursor: pointer;
   background: radial-gradient(circle at 50% 50%, #3d2f21 0 16%, #5f7048 16% 20%, #3d2f21 20% 100%);

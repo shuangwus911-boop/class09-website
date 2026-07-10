@@ -43,7 +43,7 @@ export default function ClassMusic() {
       setPlaying(true);
       setNeedTap(false);
     }).catch(() => {
-      setNeedTap(true);
+      if (wasPlaying) setNeedTap(true);
     });
   }, [cfg]);
 
@@ -60,22 +60,6 @@ export default function ClassMusic() {
     }, 2000);
     return () => clearInterval(iv);
   }, [playing]);
-
-  // Catch any user interaction to kick playback: click, tap, scroll, key
-  useEffect(() => {
-    const kick = () => {
-      if (!audioRef.current || !visible || !cfg) return;
-      if (audioRef.current.paused) {
-        audioRef.current.play().then(() => {
-          setPlaying(true);
-          setNeedTap(false);
-        }).catch(() => {});
-      }
-    };
-    const events = ['pointerdown', 'keydown', 'wheel', 'touchstart', 'scroll'];
-    events.forEach(e => window.addEventListener(e, kick, { once: false, passive: true }));
-    return () => events.forEach(e => window.removeEventListener(e, kick));
-  }, [visible, cfg]);
 
   const src = cfg?.src || '/bgm.m4a';
 
@@ -122,7 +106,7 @@ export default function ClassMusic() {
           onClick={toggle}
           onContextMenu={(e) => { e.preventDefault(); stop(); }}
           aria-label={playing ? '暂停音乐' : '播放音乐'}
-          title={playing ? '暂停音乐（右键关闭）' : '播放音乐（右键关闭）'}
+          title={playing ? '暂停音乐（右键关闭）' : '点我播放音乐（右键关闭）'}
         >
           <span className="class-music-disc-center" />
           {(!playing || needTap) && <span className="class-music-play-badge">{needTap ? '♪' : '▶'}</span>}

@@ -220,15 +220,33 @@ button { font-family: inherit; }
   position: absolute; bottom: 8px; left: 0; right: 0;
   text-align: center; font-size: 11px; color: var(--ink-soft); letter-spacing: 1.5px;
 }
-.moment.is-open { transform: translateY(-6px); z-index: 20; }
-.moment.is-open .moment-card { box-shadow: 0 6px 24px rgba(61,47,33,0.18); }
-.moment.is-open .fan { pointer-events: auto; }
-.moment.is-open .fan-photo { opacity: 1; pointer-events: auto; }
-.moment.is-open .fan-photo:nth-child(1) { transform: rotate(-22deg) scale(1); }
-.moment.is-open .fan-photo:nth-child(2) { transform: rotate(-11deg) scale(1); }
-.moment.is-open .fan-photo:nth-child(3) { transform: rotate(0deg) scale(1); }
-.moment.is-open .fan-photo:nth-child(4) { transform: rotate(11deg) scale(1); }
-.moment.is-open .fan-photo:nth-child(5) { transform: rotate(22deg) scale(1); }
+.moment.is-open,
+.moment:hover,
+.moment:focus-within { transform: translateY(-6px); z-index: 20; }
+.moment.is-open .moment-card,
+.moment:hover .moment-card,
+.moment:focus-within .moment-card { box-shadow: 0 6px 24px rgba(61,47,33,0.18); }
+.moment.is-open .fan,
+.moment:hover .fan,
+.moment:focus-within .fan { pointer-events: auto; }
+.moment.is-open .fan-photo,
+.moment:hover .fan-photo,
+.moment:focus-within .fan-photo { opacity: 1; pointer-events: auto; }
+.moment.is-open .fan-photo:nth-child(1),
+.moment:hover .fan-photo:nth-child(1),
+.moment:focus-within .fan-photo:nth-child(1) { transform: rotate(-22deg) scale(1); }
+.moment.is-open .fan-photo:nth-child(2),
+.moment:hover .fan-photo:nth-child(2),
+.moment:focus-within .fan-photo:nth-child(2) { transform: rotate(-11deg) scale(1); }
+.moment.is-open .fan-photo:nth-child(3),
+.moment:hover .fan-photo:nth-child(3),
+.moment:focus-within .fan-photo:nth-child(3) { transform: rotate(0deg) scale(1); }
+.moment.is-open .fan-photo:nth-child(4),
+.moment:hover .fan-photo:nth-child(4),
+.moment:focus-within .fan-photo:nth-child(4) { transform: rotate(11deg) scale(1); }
+.moment.is-open .fan-photo:nth-child(5),
+.moment:hover .fan-photo:nth-child(5),
+.moment:focus-within .fan-photo:nth-child(5) { transform: rotate(22deg) scale(1); }
 .fan-photo:hover { z-index: 30; filter: brightness(1.05) saturate(1.1); }
 
 .arrow {

@@ -51,10 +51,7 @@ export default function ClassMusic() {
     tryPlay();
   }, [cfg]);
 
-  // Determine actual src: KV > public fallback
   const src = cfg?.src || '/bgm.m4a';
-  const title = cfg?.title || '童话梦想家';
-  const subtitle = cfg?.subtitle || '圈圈宝贝';
 
   const toggle = async () => {
     const el = audioRef.current;
@@ -89,27 +86,16 @@ export default function ClassMusic() {
     <>
       <audio ref={audioRef} src={src} loop preload="none" />
       {visible && (
-        <div className="class-music">
-          <button
-            className={`class-music-disc${playing ? ' spinning' : ''}`}
-            onClick={toggle}
-            aria-label={playing ? '暂停' : '播放'}
-            title={title}
-          >
-            <span className="class-music-disc-center" />
-            {!playing && <span className="class-music-play-badge">{needTap ? '♪' : '▶'}</span>}
-          </button>
-          <div className="class-music-info" onClick={toggle}>
-            <div className="class-music-title">{title}</div>
-            <div className="class-music-sub">{subtitle}</div>
-          </div>
-          <button
-            className="class-music-close"
-            onClick={(e) => { e.stopPropagation(); stop(); }}
-            aria-label="关闭音乐"
-            title="关闭音乐"
-          >×</button>
-        </div>
+        <button
+          className={`class-music-disc${playing ? ' spinning' : ''}`}
+          onClick={toggle}
+          onContextMenu={(e) => { e.preventDefault(); stop(); }}
+          aria-label={playing ? '暂停音乐' : '播放音乐'}
+          title={playing ? '暂停音乐（右键关闭）' : '播放音乐（右键关闭）'}
+        >
+          <span className="class-music-disc-center" />
+          {!playing && <span className="class-music-play-badge">{needTap ? '♪' : '▶'}</span>}
+        </button>
       )}
       {!visible && (
         <button

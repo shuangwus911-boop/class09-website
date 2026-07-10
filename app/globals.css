@@ -1197,33 +1197,17 @@ button { font-family: inherit; }
 /* ============================================================
    班级之声 · Class Music (global floating player)
    ============================================================ */
-.class-music {
-  position: fixed; right: 20px; bottom: 20px; z-index: 200;
-  display: flex; align-items: center; gap: 6px;
-  background: var(--cream); border: 1px solid rgba(61,47,33,0.2);
-  border-radius: 40px; padding: 6px 12px 6px 6px; box-shadow: 0 4px 18px rgba(61,47,33,0.18);
-}
 .class-music-disc {
-  flex: 0 0 auto; width: 48px; height: 48px; border-radius: 50%; border: none; cursor: pointer;
+  position: fixed; right: 20px; bottom: 20px; z-index: 200;
+  width: 48px; height: 48px; border-radius: 50%; border: 1px solid rgba(61,47,33,0.2); cursor: pointer;
   background: radial-gradient(circle at 50% 50%, #3d2f21 0 16%, #5f7048 16% 20%, #3d2f21 20% 100%);
-  position: relative; padding: 0;
+  box-shadow: 0 4px 18px rgba(61,47,33,0.18);
+  padding: 0; margin: 0;
 }
 .class-music-disc.spinning { animation: music-spin 6s linear infinite; }
 @keyframes music-spin { to { transform: rotate(360deg); } }
 .class-music-disc-center { position: absolute; inset: 42%; border-radius: 50%; background: var(--warm-orange); }
 .class-music-play-badge { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 14px; color: var(--cream); }
-.class-music-info { padding: 0 16px 0 12px; cursor: pointer; white-space: nowrap; }
-.class-music-title { font-size: 13px; letter-spacing: 1px; color: var(--ink); }
-.class-music-sub { font-size: 10px; letter-spacing: 1px; color: var(--ink-soft); margin-top: 2px; }
-.class-music-close {
-  flex: 0 0 auto; width: 32px; height: 32px; border-radius: 50%;
-  border: none; background: none; cursor: pointer;
-  font-size: 16px; color: var(--ink-soft);
-  display: flex; align-items: center; justify-content: center;
-  padding: 0; margin-left: 4px; margin-right: 4px;
-  transition: color 0.2s, background 0.2s;
-}
-.class-music-close:hover { color: var(--warm-red); background: rgba(61,47,33,0.06); }
 .class-music-reopen {
   position: fixed; right: 20px; bottom: 20px; z-index: 200;
   width: 48px; height: 48px; border-radius: 50%;

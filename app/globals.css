@@ -657,12 +657,10 @@ button { font-family: inherit; }
   .capsule-lock { flex-direction: column; align-items: flex-start; gap: 14px; }
   .capsule-cta { align-self: stretch; text-align: center; }
   .capsule-count { position: static; display: block; text-align: right; margin-top: 12px; }
-  .fan { transform: scale(0.82); transform-origin: top center; }
 }
 
 @media (max-width: 480px) {
   .page-shell { padding: 20px 16px 28px; }
-  .fan { transform: scale(0.62); transform-origin: top center; }
   .moment { flex: 0 0 220px; }
   .hero { margin-bottom: 28px; gap: 18px; }
   .hero-tag { font-size: 9.5px; letter-spacing: 2.5px; padding: 3px 10px; }

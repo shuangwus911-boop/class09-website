@@ -52,8 +52,6 @@ export default function ClassMusic() {
     tryPlay();
   }, [cfg]);
 
-  if (!cfg || !visible) return null;
-
   const toggle = async () => {
     const el = audioRef.current;
     if (!el) return;
@@ -76,32 +74,51 @@ export default function ClassMusic() {
     setVisible(false);
   };
 
+  const reopen = () => {
+    setVisible(true);
+    if (audioRef.current) {
+      audioRef.current.play().then(() => setPlaying(true)).catch(() => setNeedTap(true));
+    }
+  };
+
+  if (!cfg) return null;
+
   return (
     <>
       <audio ref={audioRef} src={cfg.src} loop preload="auto" />
-      <div className={`class-music${expanded ? ' expanded' : ''}`}>
-        <button
-          className={`class-music-disc${playing ? ' spinning' : ''}`}
-          onClick={toggle}
-          aria-label={playing ? '暂停' : '播放'}
-          onMouseEnter={() => setExpanded(true)}
-          onMouseLeave={() => setExpanded(false)}
-          title={cfg.title}
-        >
-          <span className="class-music-disc-center" />
-          {!playing && <span className="class-music-play-badge">{needTap ? '♪' : '▶'}</span>}
-        </button>
-        <div className="class-music-info" onClick={toggle}>
-          <div className="class-music-title">{cfg.title}</div>
-          {cfg.subtitle && <div className="class-music-sub">{cfg.subtitle}</div>}
+      {visible && (
+        <div className={`class-music${expanded ? ' expanded' : ''}`}>
+          <button
+            className={`class-music-disc${playing ? ' spinning' : ''}`}
+            onClick={toggle}
+            aria-label={playing ? '暂停' : '播放'}
+            onMouseEnter={() => setExpanded(true)}
+            onMouseLeave={() => setExpanded(false)}
+            title={cfg.title}
+          >
+            <span className="class-music-disc-center" />
+            {!playing && <span className="class-music-play-badge">{needTap ? '♪' : '▶'}</span>}
+          </button>
+          <div className="class-music-info" onClick={toggle}>
+            <div className="class-music-title">{cfg.title}</div>
+            {cfg.subtitle && <div className="class-music-sub">{cfg.subtitle}</div>}
+          </div>
+          <button
+            className="class-music-close"
+            onClick={(e) => { e.stopPropagation(); stop(); }}
+            aria-label="关闭音乐"
+            title="关闭音乐"
+          >×</button>
         </div>
+      )}
+      {!visible && (
         <button
-          className="class-music-close"
-          onClick={(e) => { e.stopPropagation(); stop(); }}
-          aria-label="关闭音乐"
-          title="关闭音乐"
-        >×</button>
-      </div>
+          onClick={reopen}
+          className="class-music-reopen"
+          aria-label="打开音乐"
+          title="打开音乐"
+        >♪</button>
+      )}
     </>
   );
 }

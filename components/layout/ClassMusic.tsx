@@ -30,7 +30,6 @@ export default function ClassMusic() {
       .catch(() => {});
   }, []);
 
-  // Restore playback on page load
   useEffect(() => {
     if (!cfg || !audioRef.current) return;
     const el = audioRef.current;
@@ -38,26 +37,20 @@ export default function ClassMusic() {
 
     const wasPlaying = sessionStorage.getItem(STORAGE_KEY) === '1';
     const savedTime = sessionStorage.getItem('class09_music_time');
+    if (wasPlaying && savedTime) el.currentTime = parseFloat(savedTime);
 
-    if (wasPlaying && savedTime) {
-      el.currentTime = parseFloat(savedTime);
-    }
-
-    // Try to play (will fail without user gesture on fresh load)
     el.play().then(() => {
       setPlaying(true);
       setNeedTap(false);
     }).catch(() => {
-      setNeedTap(wasPlaying); // show ♪ if was playing before
+      setNeedTap(true);
     });
   }, [cfg]);
 
-  // Save play state on change
   useEffect(() => {
     sessionStorage.setItem(STORAGE_KEY, playing ? '1' : '0');
   }, [playing]);
 
-  // Save currentTime while playing
   useEffect(() => {
     if (!playing || !audioRef.current) return;
     const iv = setInterval(() => {
@@ -68,25 +61,21 @@ export default function ClassMusic() {
     return () => clearInterval(iv);
   }, [playing]);
 
-  // Wait for first user interaction to auto-play
+  // Catch any user interaction to kick playback: click, tap, scroll, key
   useEffect(() => {
-    const kick = async () => {
-      if (!audioRef.current || !visible) return;
+    const kick = () => {
+      if (!audioRef.current || !visible || !cfg) return;
       if (audioRef.current.paused) {
-        try {
-          await audioRef.current.play();
+        audioRef.current.play().then(() => {
           setPlaying(true);
           setNeedTap(false);
-        } catch {}
+        }).catch(() => {});
       }
     };
-    window.addEventListener('pointerdown', kick);
-    window.addEventListener('keydown', kick);
-    return () => {
-      window.removeEventListener('pointerdown', kick);
-      window.removeEventListener('keydown', kick);
-    };
-  }, [visible]);
+    const events = ['pointerdown', 'keydown', 'wheel', 'touchstart', 'scroll'];
+    events.forEach(e => window.addEventListener(e, kick, { once: false, passive: true }));
+    return () => events.forEach(e => window.removeEventListener(e, kick));
+  }, [visible, cfg]);
 
   const src = cfg?.src || '/bgm.m4a';
 

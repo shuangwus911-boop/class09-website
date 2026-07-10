@@ -7,23 +7,29 @@ import type { TeacherLetter } from '@/data/teacher';
 
 export default function TeacherPreview() {
   const [letters, setLetters] = useState<TeacherLetter[]>(FALLBACK);
+  const [globalAvatar, setGlobalAvatar] = useState('');
 
   useEffect(() => {
     fetch('/api/teacher').then(r => (r.ok ? r.json() : null)).then(d => {
       if (Array.isArray(d) && d.length) setLetters(d);
+    });
+    fetch('/api/teacher_avatar').then(r => (r.ok ? r.json() : null)).then(d => {
+      if (d?.avatar) setGlobalAvatar(d.avatar);
     });
   }, []);
 
   const letter = letters.find(l => l.featured) || letters[letters.length - 1];
   if (!letter) return null;
 
+  const avatarUrl = globalAvatar || '';
+
   return (
     <div className="teacher">
       <Link href="/teacher" className="teacher-more">看 历 年 寄 语 →</Link>
       <div className="teacher-portrait">
         <div className="teacher-avatar">
-          {letter.avatar ? (
-            <img src={letter.avatar} alt={letter.teacher} />
+          {avatarUrl ? (
+            <img src={avatarUrl} alt={letter.teacher} />
           ) : (
             <svg viewBox="0 0 120 120">
               <rect width="120" height="120" fill="var(--paper-2)" />

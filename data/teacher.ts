@@ -8,7 +8,6 @@ export type TeacherLetter = {
   teacher: string;     // 署名，如 "王老师"
   role: string;        // 身份，如 "班主任 · 语文"
   date: string;        // 落款日期，如 "2025.09"
-  avatar?: string;     // 头像 URL（/images/...），前台展示用
   featured?: boolean;  // 是否首页展示
   status?: 'draft' | 'published';
 };

@@ -296,6 +296,11 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
         const published = (data || []).filter((m: any) => m.status !== 'draft');
         return json(published);
       }
+      // GET /api/teacher_avatar — global teacher portrait URL (public)
+      if (path === 'teacher_avatar') {
+        const url_ = (await env.CLASS09_CMS.get('teacher_avatar')) || '';
+        return json({ avatar: url_ });
+      }
       // GET /api/music — background music config
       if (path === 'music') {
         const data = await env.CLASS09_CMS.get('music', 'json');
@@ -414,6 +419,15 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       await env.CLASS09_CMS.put('teacher', JSON.stringify(body));
       await writeLog(env.CLASS09_CMS, 'update_teacher', user.email);
       return json({ ok: true });
+    }
+
+    // PUT /api/teacher_avatar — update global teacher portrait URL
+    if (path === 'teacher_avatar' && request.method === 'PUT') {
+      const { avatar } = (await request.json()) as any;
+      if (typeof avatar !== 'string') return json({ error: 'avatar 必须是字符串' }, 400);
+      await env.CLASS09_CMS.put('teacher_avatar', avatar);
+      await writeLog(env.CLASS09_CMS, 'update_teacher_avatar', user.email, avatar ? 'set' : 'cleared');
+      return json({ ok: true, avatar });
     }
 
     // PUT /api/music — overwrite background music config

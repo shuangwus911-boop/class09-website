@@ -602,7 +602,7 @@ function InviteManager({ authFetch }: { authFetch: any }) {
 // --- Teacher Letter Editor ---
 type TeacherLetter = {
   id: string; year: number; yearLabel: string; title: string; text: string;
-  teacher: string; role: string; date: string; avatar?: string;
+  teacher: string; role: string; date: string;
   featured?: boolean; status?: 'draft' | 'published';
 };
 
@@ -610,10 +610,15 @@ function TeacherEditor({ token, role, authFetch }: { token: string; role: string
   const [letters, setLetters] = useState<TeacherLetter[]>([]);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
+  const [globalAvatar, setGlobalAvatar] = useState('');
+  const [avatarSaving, setAvatarSaving] = useState(false);
+  const [avatarMsg, setAvatarMsg] = useState('');
 
   useEffect(() => {
     fetch(`${API_BASE}/teacher?all=1`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json()).then(d => { if (Array.isArray(d)) setLetters(d); });
+    fetch(`${API_BASE}/teacher_avatar`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.ok ? r.json() : null).then(d => { if (d?.avatar) setGlobalAvatar(d.avatar); });
   }, [token]);
 
   const save = async () => {
@@ -648,7 +653,7 @@ function TeacherEditor({ token, role, authFetch }: { token: string; role: string
     setLetters(n);
   };
 
-  const uploadAvatar = async (i: number, file: File) => {
+  const uploadGlobalAvatar = async (file: File) => {
     const ext = file.name.split('.').pop()?.toLowerCase() || 'png';
     const key = `avatar/${Date.now()}.${ext}`;
     const form = new FormData();
@@ -657,11 +662,36 @@ function TeacherEditor({ token, role, authFetch }: { token: string; role: string
     try {
       const res = await authFetch(`${API_BASE}/upload`, { method: 'POST', body: form });
       const data = await res.json();
-      if (data.ok && data.url) upd(i, 'avatar', data.url);
-      else alert(data.error || '头像上传失败');
+      if (data.ok && data.url) {
+        setGlobalAvatar(data.url);
+        return data.url;
+      } else {
+        alert(data.error || '头像上传失败');
+      }
     } catch (e: any) {
       alert(e?.message || '头像上传失败');
     }
+    return null;
+  };
+
+  const saveGlobalAvatar = async (url: string) => {
+    setAvatarSaving(true);
+    try {
+      await authFetch(`${API_BASE}/teacher_avatar`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ avatar: url }),
+      });
+      setAvatarMsg('已保存');
+    } catch (e: any) { setAvatarMsg(e.message); }
+    setAvatarSaving(false);
+    setTimeout(() => setAvatarMsg(''), 2000);
+  };
+
+  const clearGlobalAvatar = async () => {
+    if (!confirm('移除当前头像？前台会恢复为默认占位图。')) return;
+    setGlobalAvatar('');
+    await saveGlobalAvatar('');
   };
 
   return (
@@ -671,6 +701,63 @@ function TeacherEditor({ token, role, authFetch }: { token: string; role: string
         <button className="admin-btn-add" onClick={add}>+ 添加一封寄语</button>
       </div>
       <p className="admin-hint">每个学年一封，班主任写给孩子们的话。勾选「首页展示」的那封会出现在首页预览。</p>
+
+      {/* Global avatar block */}
+      <div className="admin-card" style={{ marginBottom: 18, padding: 18 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap' }}>
+          <div style={{
+            width: 84, height: 84, borderRadius: '50%', overflow: 'hidden',
+            border: '1.5px solid var(--ink)', flexShrink: 0,
+            background: 'var(--paper-2)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center'
+          }}>
+            {globalAvatar ? (
+              <img src={globalAvatar} alt="班主任头像" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+            ) : (
+              <svg viewBox="0 0 120 120" style={{ width: '100%', height: '100%' }}>
+                <rect width="120" height="120" fill="var(--paper-2)" />
+                <circle cx="60" cy="46" r="24" fill="var(--accent)" />
+                <path d="M22 116 Q60 70 98 116 Z" fill="var(--sage)" />
+              </svg>
+            )}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1, minWidth: 240 }}>
+            <div style={{ fontSize: 14, letterSpacing: 2, color: 'var(--ink)', fontWeight: 500 }}>班主任头像</div>
+            <div style={{ fontSize: 11.5, color: 'var(--ink-soft)', letterSpacing: 1, lineHeight: 1.7 }}>
+              {globalAvatar ? '已上传（所有寄语共用这张头像，前台圆形裁切显示）' : '未上传，所有寄语前台会显示默认占位图'}
+            </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <label style={{ cursor: 'pointer' }}>
+                <span className="admin-btn-icon" style={{ cursor: 'pointer', fontSize: 12, width: 'auto', padding: '5px 14px' }}>
+                  {globalAvatar ? '更换头像' : '上传头像'}
+                </span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  style={{ display: 'none' }}
+                  onChange={async (e) => {
+                    const f = e.target.files?.[0];
+                    if (!f) return;
+                    const url = await uploadGlobalAvatar(f);
+                    if (url) await saveGlobalAvatar(url);
+                    e.target.value = '';
+                  }}
+                />
+              </label>
+              {globalAvatar && (
+                <button
+                  type="button"
+                  className="admin-btn-icon"
+                  style={{ fontSize: 12, width: 'auto', padding: '5px 14px', color: 'var(--warm-red)', borderColor: 'var(--warm-red)' }}
+                  onClick={clearGlobalAvatar}
+                >移除</button>
+              )}
+              {avatarMsg && <span style={{ fontSize: 11, color: 'var(--sage-deep)', letterSpacing: 1 }}>{avatarMsg}</span>}
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div className="admin-card-list">
         {letters.map((l, i) => {
           const isDraft = l.status === 'draft';
@@ -688,50 +775,6 @@ function TeacherEditor({ token, role, authFetch }: { token: string; role: string
                 </div>
               </div>
               <div className="admin-card-grid">
-                <div className="admin-full" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                  <div style={{
-                    width: 72, height: 72, borderRadius: '50%', overflow: 'hidden',
-                    border: '1.5px solid var(--ink)', flexShrink: 0,
-                    background: 'var(--paper-2)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center'
-                  }}>
-                    {l.avatar ? (
-                      <img src={l.avatar} alt="头像" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-                    ) : (
-                      <svg viewBox="0 0 120 120" style={{ width: '100%', height: '100%' }}>
-                        <rect width="120" height="120" fill="var(--paper-2)" />
-                        <circle cx="60" cy="46" r="24" fill="var(--accent)" />
-                        <path d="M22 116 Q60 70 98 116 Z" fill="var(--sage)" />
-                      </svg>
-                    )}
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12, color: 'var(--ink-soft)' }}>
-                      <span className="admin-btn-icon" style={{ cursor: 'pointer', fontSize: 12, width: 'auto', padding: '4px 12px' }}>上传头像</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        style={{ display: 'none' }}
-                        onChange={(e) => {
-                          const f = e.target.files?.[0];
-                          if (f) uploadAvatar(i, f);
-                          e.target.value = '';
-                        }}
-                      />
-                    </label>
-                    {l.avatar && (
-                      <button
-                        type="button"
-                        className="admin-btn-icon"
-                        style={{ fontSize: 12, width: 'auto', padding: '4px 12px', color: 'var(--warm-red)', borderColor: 'var(--warm-red)' }}
-                        onClick={() => upd(i, 'avatar', '')}
-                      >移除头像</button>
-                    )}
-                    <span style={{ fontSize: 11, color: 'var(--ink-soft)', letterSpacing: 1 }}>
-                      {l.avatar ? '已上传（首页圆形裁切显示）' : '未上传，将显示默认占位图'}
-                    </span>
-                  </div>
-                </div>
                 <label><span>学年</span><input type="number" value={l.year} onChange={e => upd(i, 'year', parseInt(e.target.value) || l.year)} /></label>
                 <label><span>学年标签</span><input value={l.yearLabel} onChange={e => upd(i, 'yearLabel', e.target.value)} placeholder="2025 学年 · 一年级" /></label>
                 <label><span>标题</span><input value={l.title} onChange={e => upd(i, 'title', e.target.value)} placeholder="致我亲爱的孩子们" /></label>

@@ -11,7 +11,7 @@ export default function Page() {
   const [moments, setMoments] = useState<Moment[]>(FALLBACK);
 
   useEffect(() => {
-    fetch('/api/moments').then(r => r.ok ? r.json() : null).then(d => { if (d) setMoments(d); });
+    fetch('/api/moments').then(r => r.ok ? r.json() : null).then(d => { if (Array.isArray(d) && d.length) setMoments(d); }).catch(() => {});
   }, []);
 
   // Group moments by semester
@@ -35,9 +35,9 @@ export default function Page() {
           <div className="album-semester-label">{semester}</div>
           <div className="album-grid">
             {items.map((m) => (
-              <a key={m.slug} href={`/album/${m.slug}/`} className="album-card">
+              <a key={m.slug} href={`/album/view/?slug=${encodeURIComponent(m.slug)}`} className="album-card">
                 <div className="album-card-cover">
-                  <MomentCover slug={m.cover} />
+                  <MomentCover slug={m.slug} />
                   <div className="moment-count">共 · {m.count} 张</div>
                 </div>
                 <div className="album-card-body">

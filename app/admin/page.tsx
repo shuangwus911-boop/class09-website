@@ -244,13 +244,19 @@ function MomentEditor({ token, role, authFetch }: { token: string; role: string;
   const [moments, setMoments] = useState<Moment[]>([]);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
+  const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
     fetch(`${API_BASE}/moments?all=1`, { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.json()).then(d => { if (Array.isArray(d)) setMoments(d); });
+      .then(r => r.ok ? r.json() : Promise.reject(new Error('加载失败')))
+      .then(d => { if (Array.isArray(d)) { setMoments(d); setLoaded(true); } else { setLoadError(true); } })
+      .catch(() => setLoadError(true));
   }, [token]);
 
   const save = async () => {
+    if (!loaded) { setMsg('数据尚未成功加载，暂不能保存（避免覆盖云端）'); setTimeout(() => setMsg(''), 3000); return; }
+    if (moments.length === 0 && !confirm('当前列表为空，保存会清空线上所有时光相册。确定要继续吗？')) return;
     setSaving(true);
     try {
       await authFetch(`${API_BASE}/moments`, {
@@ -337,6 +343,8 @@ function MomentEditor({ token, role, authFetch }: { token: string; role: string;
         <h3>时光相册 <span className="admin-count">{moments.length}</span>{drafts.length > 0 && <span style={{ marginLeft: 8, color: 'var(--warm-orange)', fontSize: 11 }}>({drafts.length}篇待审)</span>}</h3>
         <button className="admin-btn-add" onClick={add}>+ 添加时刻</button>
       </div>
+      {loadError && <p className="admin-hint" style={{ color: 'var(--warm-orange)', fontWeight: 600 }}>⚠ 数据加载失败，为保护线上内容已禁用保存。请刷新页面重试。</p>}
+      {role !== 'admin' && <p className="admin-hint">你是「编辑」身份，可查看与整理，但保存需站长操作。</p>}
       {drafts.length > 0 && <p className="admin-hint">橙色边框 = 草稿，需站长发布后前台才可见</p>}
       <div className="admin-card-list">
         {moments.map((m, i) => (
@@ -349,10 +357,10 @@ function MomentEditor({ token, role, authFetch }: { token: string; role: string;
             onDeletePhoto={(photoIdx: number) => deletePhoto(i, photoIdx)}
           />
         ))}
-        {moments.length === 0 && <p className="admin-empty">暂无数据，点击上方按钮添加第一个时刻</p>}
+        {moments.length === 0 && <p className="admin-empty">{loaded ? '暂无数据，点击上方按钮添加第一个时刻' : (loadError ? '' : '加载中…')}</p>}
       </div>
       <div className="admin-actions">
-        <button className="admin-btn-save" onClick={save} disabled={saving}>{saving ? '保存中...' : '保存所有更改'}</button>
+        <button className="admin-btn-save" onClick={save} disabled={saving || !loaded || role !== 'admin'}>{saving ? '保存中...' : '保存所有更改'}</button>
         {msg && <span className="admin-msg">{msg}</span>}
       </div>
     </div>
@@ -364,13 +372,19 @@ function HonorEditor({ token, authFetch }: { token: string; authFetch: any }) {
   const [honors, setHonors] = useState<Honor[]>([]);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
+  const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
     fetch(`${API_BASE}/honors?all=1`, { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.json()).then(d => { if (Array.isArray(d)) setHonors(d); });
+      .then(r => r.ok ? r.json() : Promise.reject(new Error('加载失败')))
+      .then(d => { if (Array.isArray(d)) { setHonors(d); setLoaded(true); } else { setLoadError(true); } })
+      .catch(() => setLoadError(true));
   }, [token]);
 
   const save = async () => {
+    if (!loaded) { setMsg('数据尚未成功加载，暂不能保存（避免覆盖云端）'); setTimeout(() => setMsg(''), 3000); return; }
+    if (honors.length === 0 && !confirm('当前列表为空，保存会清空线上所有荣誉。确定要继续吗？')) return;
     setSaving(true);
     try {
       await authFetch(`${API_BASE}/honors`, {
@@ -394,12 +408,13 @@ function HonorEditor({ token, authFetch }: { token: string; authFetch: any }) {
         <h3>荣耀墙 <span className="admin-count">{honors.length}</span></h3>
         <button className="admin-btn-add" onClick={add}>+ 添加荣誉</button>
       </div>
+      {loadError && <p className="admin-hint" style={{ color: 'var(--warm-orange)', fontWeight: 600 }}>⚠ 数据加载失败，为保护线上内容已禁用保存。请刷新页面重试。</p>}
       <div className="admin-card-list">
         {honors.map((h, i) => (
           <div key={h.id} className="admin-card">
             <div className="admin-card-header">
               <span className="admin-card-badge" style={{ background: 'var(--badge-blue)' }}>{h.date || '未设置日期'}</span>
-              <button className="admin-btn-icon" onClick={async () => { if (confirm('删除「' + (h.title || '未命名') + '」？」')) { await trashToKV(authFetch, 'honor', h, h.title); setHonors(honors.filter((_, j) => j !== i)); } }} title="删除此条">×</button>
+              <button className="admin-btn-icon" onClick={async () => { if (confirm('删除「' + (h.title || '未命名') + '」？')) { await trashToKV(authFetch, 'honor', h, h.title); setHonors(honors.filter((_, j) => j !== i)); } }} title="删除此条">×</button>
             </div>
             <div className="admin-card-grid">
               <label><span>荣誉名称</span><input value={h.title} onChange={e => { const n = [...honors]; n[i] = { ...h, title: e.target.value }; setHonors(n); }} /></label>
@@ -412,10 +427,10 @@ function HonorEditor({ token, authFetch }: { token: string; authFetch: any }) {
             </div>
           </div>
         ))}
-        {honors.length === 0 && <p className="admin-empty">暂无数据</p>}
+        {honors.length === 0 && <p className="admin-empty">{loaded ? '暂无数据' : (loadError ? '' : '加载中…')}</p>}
       </div>
       <div className="admin-actions">
-        <button className="admin-btn-save" onClick={save} disabled={saving}>{saving ? '保存中...' : '保存所有更改'}</button>
+        <button className="admin-btn-save" onClick={save} disabled={saving || !loaded}>{saving ? '保存中...' : '保存所有更改'}</button>
         {msg && <span className="admin-msg">{msg}</span>}
       </div>
     </div>
@@ -622,15 +637,21 @@ function TeacherEditor({ token, role, authFetch }: { token: string; role: string
   const [globalAvatar, setGlobalAvatar] = useState('');
   const [avatarSaving, setAvatarSaving] = useState(false);
   const [avatarMsg, setAvatarMsg] = useState('');
+  const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
     fetch(`${API_BASE}/teacher?all=1`, { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.json()).then(d => { if (Array.isArray(d)) setLetters(d); });
+      .then(r => r.ok ? r.json() : Promise.reject(new Error('加载失败')))
+      .then(d => { if (Array.isArray(d)) { setLetters(d); setLoaded(true); } else { setLoadError(true); } })
+      .catch(() => setLoadError(true));
     fetch(`${API_BASE}/teacher_avatar`, { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.ok ? r.json() : null).then(d => { if (d?.avatar) setGlobalAvatar(d.avatar); });
+      .then(r => r.ok ? r.json() : null).then(d => { if (d?.avatar) setGlobalAvatar(d.avatar); }).catch(() => {});
   }, [token]);
 
   const save = async () => {
+    if (!loaded) { setMsg('数据尚未成功加载，暂不能保存（避免覆盖云端）'); setTimeout(() => setMsg(''), 3000); return; }
+    if (letters.length === 0 && !confirm('当前没有任何寄语，保存会清空线上所有班主任寄语。确定要继续吗？')) return;
     setSaving(true);
     try {
       await authFetch(`${API_BASE}/teacher`, {
@@ -663,6 +684,8 @@ function TeacherEditor({ token, role, authFetch }: { token: string; role: string
   };
 
   const uploadGlobalAvatar = async (file: File) => {
+    if (!file.type.startsWith('image/')) { alert('头像仅支持图片格式（jpg/png/webp/gif）'); return null; }
+    if (file.size > 2 * 1024 * 1024) { alert('头像图片不能超过 2MB，请先压缩后再上传'); return null; }
     const ext = file.name.split('.').pop()?.toLowerCase() || 'png';
     const key = `avatar/${Date.now()}.${ext}`;
     const form = new FormData();
@@ -710,6 +733,8 @@ function TeacherEditor({ token, role, authFetch }: { token: string; role: string
         <button className="admin-btn-add" onClick={add}>+ 添加一封寄语</button>
       </div>
       <p className="admin-hint">每个学年一封，班主任写给孩子们的话。勾选「首页展示」的那封会出现在首页预览。</p>
+      {loadError && <p className="admin-hint" style={{ color: 'var(--warm-orange)', fontWeight: 600 }}>⚠ 数据加载失败，为保护线上内容已禁用保存。请刷新页面重试。</p>}
+      {role !== 'admin' && <p className="admin-hint">你是「编辑」身份，可查看与整理，但保存需站长操作。</p>}
 
       {/* Global avatar block */}
       <div className="admin-card" style={{ marginBottom: 18, padding: 18 }}>
@@ -796,10 +821,10 @@ function TeacherEditor({ token, role, authFetch }: { token: string; role: string
             </div>
           );
         })}
-        {letters.length === 0 && <p className="admin-empty">暂无寄语，点击上方按钮添加第一封</p>}
+        {letters.length === 0 && <p className="admin-empty">{loaded ? '暂无寄语，点击上方按钮添加第一封' : (loadError ? '' : '加载中…')}</p>}
       </div>
       <div className="admin-actions">
-        <button className="admin-btn-save" onClick={save} disabled={saving}>{saving ? '保存中...' : '保存所有更改'}</button>
+        <button className="admin-btn-save" onClick={save} disabled={saving || !loaded || role !== 'admin'}>{saving ? '保存中...' : '保存所有更改'}</button>
         {msg && <span className="admin-msg">{msg}</span>}
       </div>
     </div>
@@ -859,7 +884,7 @@ function MusicManager({ authFetch }: { authFetch: any }) {
         style={{ marginBottom: 16 }}
       >
         <p>{uploading ? '上传中...' : (cfg.src ? '已有音频 · 点击可替换' : '点击选择音频文件')}</p>
-        <small>支持 mp3 / m4a / ogg / wav · 最大 20MB</small>
+        <small>支持 mp3 / m4a / ogg / wav · 最大 10MB</small>
         <input id="music-input" type="file" accept="audio/*" onChange={e => { if (e.target.files?.[0]) uploadAudio(e.target.files[0]); e.target.value = ''; }} style={{ display: 'none' }} />
       </div>
 
@@ -886,7 +911,7 @@ function MusicManager({ authFetch }: { authFetch: any }) {
 
 // --- Capsule Settings (time capsule封面/开启日期，信件内容永久密封不可读) ---
 function CapsuleSettings({ authFetch }: { authFetch: any }) {
-  const [meta, setMeta] = useState<{ title: string; intro: string; openDate: string }>({ title: '写给 2032 年毕业的我', intro: '每个小朋友都写下一封信，装进这枚时光胶囊。它会一直沉睡，直到 2032 年夏天毕业那天，才被一封封开启。', openDate: '2032-06-30' });
+  const [meta, setMeta] = useState<{ title: string; intro: string; openDate: string }>({ title: '写给 2031 年毕业的我', intro: '每个小朋友都写下一封信，装进这枚时光胶囊。它会一直沉睡，直到 2031 年夏天毕业那天，才被一封封开启。', openDate: '2031-06-30' });
   const [count, setCount] = useState(0);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
@@ -917,7 +942,7 @@ function CapsuleSettings({ authFetch }: { authFetch: any }) {
       <p className="admin-hint">🔒 所有信件都被完全密封，任何人（包括站长）都无法读取内容，只有到 {meta.openDate} 开启日之后才能一封封打开。这里只能设置封面文字和开启日期。</p>
       <div className="admin-card-grid">
         <label><span>开启日期</span><input type="date" value={meta.openDate} onChange={e => setMeta({ ...meta, openDate: e.target.value })} /></label>
-        <label className="admin-full"><span>标题</span><input value={meta.title} onChange={e => setMeta({ ...meta, title: e.target.value })} placeholder="写给 2032 年毕业的我" /></label>
+        <label className="admin-full"><span>标题</span><input value={meta.title} onChange={e => setMeta({ ...meta, title: e.target.value })} placeholder="写给 2031 年毕业的我" /></label>
         <label className="admin-full"><span>引言</span><textarea value={meta.intro} onChange={e => setMeta({ ...meta, intro: e.target.value })} rows={4} /></label>
       </div>
       <div className="admin-actions">

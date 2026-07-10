@@ -20,8 +20,8 @@ export default function HomePage() {
   const [honors, setHonors] = useState<Honor[]>(FALLBACK_HONORS);
 
   useEffect(() => {
-    fetch('/api/moments').then(r => r.ok ? r.json() : null).then(d => { if (d) setMoments(d); });
-    fetch('/api/honors').then(r => r.ok ? r.json() : null).then(d => { if (d) setHonors(d); });
+    fetch('/api/moments').then(r => r.ok ? r.json() : null).then(d => { if (Array.isArray(d) && d.length) setMoments(d); }).catch(() => {});
+    fetch('/api/honors').then(r => r.ok ? r.json() : null).then(d => { if (Array.isArray(d) && d.length) setHonors(d); }).catch(() => {});
   }, []);
 
   const latestHonor = honors.find(h => h.featured) ?? honors[0];
@@ -64,7 +64,7 @@ export default function HomePage() {
         <span className="sec-jp">TIMELINE · 六年时光</span>
         <span className="sec-cn">时 光 轴</span>
       </div>
-      <div className="sec-note">2025 秋　→　2032 夏　·　我们要一起走的六个学年</div>
+      <div className="sec-note">2025 秋　→　2031 夏　·　我们要一起走的六个学年</div>
       <Timeline nodes={TIMELINE} />
 
       <Footer />

@@ -1,4 +1,4 @@
-// 六年时光轴。表示班级从 2025 秋入学到 2032 夏毕业。
+// 六年时光轴。表示班级从 2025 秋入学到 2031 夏毕业。
 
 export type TimelineStatus = 'done' | 'current' | 'future';
 
@@ -18,5 +18,5 @@ export const TIMELINE: TimelineNode[] = [
   { key: 'g4', yearRange: '2028—2029', grade: '四 年 级', status: 'future', hint: '留待长大', slug: 'g4' },
   { key: 'g5', yearRange: '2029—2030', grade: '五 年 级', status: 'future', hint: '留待长大', slug: 'g5' },
   { key: 'g6', yearRange: '2030—2031', grade: '六 年 级', status: 'future', hint: '留待长大', slug: 'g6' },
-  { key: 'graduation', yearRange: '2032 夏', grade: '毕 业', status: 'future', hint: '开启时间胶囊' },
+  { key: 'graduation', yearRange: '2031 夏', grade: '毕 业', status: 'future', hint: '开启时间胶囊' },
 ];

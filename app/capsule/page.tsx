@@ -13,9 +13,9 @@ type CapsuleMeta = {
 
 const FALLBACK: CapsuleMeta = {
   count: 0,
-  openDate: '2032-06-30',
-  title: '写给 2032 年毕业的我',
-  intro: '每个小朋友都写下一封信，装进这枚时光胶囊。它会一直沉睡，直到 2032 年夏天毕业那天，才被一封封开启，看看六年前那个刚上一年级的自己。',
+  openDate: '2031-06-30',
+  title: '写给 2031 年毕业的我',
+  intro: '每个小朋友都写下一封信，装进这枚时光胶囊。它会一直沉睡，直到 2031 年夏天毕业那天，才被一封封开启，看看六年前那个刚上一年级的自己。',
 };
 
 function daysUntil(dateStr: string): number {
@@ -33,7 +33,7 @@ export default function Page() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    fetch('/api/capsule').then(r => (r.ok ? r.json() : null)).then(d => { if (d) setMeta(d); });
+    fetch('/api/capsule').then(r => (r.ok ? r.json() : null)).then(d => { if (d) setMeta(d); }).catch(() => {});
   }, []);
 
   const seal = async (e: React.FormEvent) => {
@@ -98,7 +98,7 @@ export default function Page() {
           </div>
         ) : (
           <form className="capsule-form" onSubmit={seal}>
-            <div className="capsule-form-lock">🔒 写下的内容会被立即封存加密，2032 年开启日前谁都无法查看</div>
+            <div className="capsule-form-lock">🔒 写下的内容会被立即封存加密，2031 年开启日前谁都无法查看</div>
             <label className="capsule-field">
               <span>署名（选填，可匿名）</span>
               <input value={author} onChange={e => setAuthor(e.target.value)} placeholder="如：朵朵 / 朵朵妈妈 / 匿名" maxLength={40} />

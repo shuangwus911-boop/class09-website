@@ -11,7 +11,7 @@ export default function Page() {
   const [honors, setHonors] = useState<Honor[]>(FALLBACK);
 
   useEffect(() => {
-    fetch('/api/honors').then(r => r.ok ? r.json() : null).then(d => { if (d) setHonors(d); });
+    fetch('/api/honors').then(r => r.ok ? r.json() : null).then(d => { if (Array.isArray(d) && d.length) setHonors(d); }).catch(() => {});
   }, []);
 
   return (

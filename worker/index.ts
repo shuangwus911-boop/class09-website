@@ -433,6 +433,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
 
     // PUT /api/teacher — overwrite teacher letters array
     if (path === 'teacher' && request.method === 'PUT') {
+      if (user.role !== 'admin') return json({ error: '仅站长可覆写数据集' }, 403);
       const body = await request.json();
       await env.CLASS09_CMS.put('teacher', JSON.stringify(body));
       await writeLog(env.CLASS09_CMS, 'update_teacher', user.email);
@@ -441,6 +442,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
 
     // PUT /api/teacher_avatar — update global teacher portrait URL
     if (path === 'teacher_avatar' && request.method === 'PUT') {
+      if (user.role !== 'admin') return json({ error: '仅站长可修改头像' }, 403);
       const { avatar } = (await request.json()) as any;
       if (typeof avatar !== 'string') return json({ error: 'avatar 必须是字符串' }, 400);
       await env.CLASS09_CMS.put('teacher_avatar', avatar);
@@ -450,6 +452,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
 
     // PUT /api/music — overwrite background music config
     if (path === 'music' && request.method === 'PUT') {
+      if (user.role !== 'admin') return json({ error: '仅站长可修改背景音乐' }, 403);
       const body = await request.json();
       await env.CLASS09_CMS.put('music', JSON.stringify(body));
       await writeLog(env.CLASS09_CMS, 'update_music', user.email);
@@ -563,6 +566,13 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
         const honors = await env.CLASS09_CMS.get('honors', 'json') as any[] || [];
         honors.push(item.data);
         await env.CLASS09_CMS.put('honors', JSON.stringify(honors));
+      } else if (item.type === 'teacher_letter') {
+        const letters = await env.CLASS09_CMS.get('teacher', 'json') as any[] || [];
+        letters.push(item.data);
+        await env.CLASS09_CMS.put('teacher', JSON.stringify(letters));
+      } else {
+        // Unknown type — do NOT delete the trash record, so data is never lost silently
+        return json({ error: `暂不支持恢复该类型（${item.type}），记录已保留` }, 400);
       }
 
       await env.CLASS09_CMS.delete(key);

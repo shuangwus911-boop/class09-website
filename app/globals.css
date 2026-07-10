@@ -247,6 +247,12 @@ button { font-family: inherit; }
 .moment:focus-within .fan-photo:nth-child(5) { transform: translateX(170px) rotate(18deg) scale(1); }
 .fan-photo:hover { z-index: 30; filter: brightness(1.05) saturate(1.1); }
 
+/* 触屏设备无 hover：装饰性扇形照片无法展开且绝对定位会溢出遮挡相邻卡片，直接隐藏，改由点击卡片进入相册详情 */
+@media (hover: none) {
+  .fan { display: none; }
+  .moment-card { cursor: pointer; }
+}
+
 .arrow {
   position: absolute; top: 50%; transform: translateY(-50%);
   width: 44px; height: 44px; border-radius: 50%;

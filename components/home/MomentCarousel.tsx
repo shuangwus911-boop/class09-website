@@ -42,7 +42,7 @@ export default function MomentCarousel({ moments }: Props) {
             return (
               <a
                 key={m.slug}
-                href={`/album/${m.slug}/`}
+                href={`/album/view/?slug=${encodeURIComponent(m.slug)}`}
                 className={`moment${isOpen ? ' is-open' : ''}`}
                 onMouseEnter={() => setOpenId(m.slug)}
                 onMouseLeave={() => setOpenId(null)}

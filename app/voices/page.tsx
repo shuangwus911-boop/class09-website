@@ -10,7 +10,7 @@ export default function Page() {
   const [moments, setMoments] = useState<Moment[]>(FALLBACK);
 
   useEffect(() => {
-    fetch('/api/moments').then(r => r.ok ? r.json() : null).then(d => { if (d) setMoments(d); });
+    fetch('/api/moments').then(r => r.ok ? r.json() : null).then(d => { if (Array.isArray(d) && d.length) setMoments(d); }).catch(() => {});
   }, []);
 
   // Collect all quotes from moments

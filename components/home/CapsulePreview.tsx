@@ -10,14 +10,14 @@ function daysUntil(dateStr: string): number {
 
 export default function CapsulePreview() {
   const [count, setCount] = useState(0);
-  const [openDate, setOpenDate] = useState('2032-06-30');
-  const [title, setTitle] = useState('写给 2032 年毕业的我');
-  const [intro, setIntro] = useState('每个小朋友都写下一封信，装进这枚时光胶囊。它会一直沉睡，直到 2032 年夏天毕业那天，才被一封封开启。');
+  const [openDate, setOpenDate] = useState('2031-06-30');
+  const [title, setTitle] = useState('写给 2031 年毕业的我');
+  const [intro, setIntro] = useState('每个小朋友都写下一封信，装进这枚时光胶囊。它会一直沉睡，直到 2031 年夏天毕业那天，才被一封封开启。');
 
   useEffect(() => {
     fetch('/api/capsule').then(r => (r.ok ? r.json() : null)).then(d => {
-      if (d) { setCount(d.count || 0); setOpenDate(d.openDate || '2032-06-30'); if (d.title) setTitle(d.title); if (d.intro) setIntro(d.intro); }
-    });
+      if (d) { setCount(d.count || 0); setOpenDate(d.openDate || '2031-06-30'); if (d.title) setTitle(d.title); if (d.intro) setIntro(d.intro); }
+    }).catch(() => {});
   }, []);
 
   const days = daysUntil(openDate);

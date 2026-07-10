@@ -6,17 +6,35 @@ import Footer from '@/components/layout/Footer';
 import { MOMENTS } from '@/data/moments';
 import type { Moment } from '@/data/moments';
 
-export default function MomentDetail({ slug }: { slug: string }) {
-  const fallback = MOMENTS.find((m) => m.slug === slug);
+export default function MomentDetail({ slug: slugProp }: { slug?: string }) {
+  const [slug, setSlug] = useState<string>(slugProp || '');
+  const fallback = slug ? MOMENTS.find((m) => m.slug === slug) : undefined;
   const [moment, setMoment] = useState<Moment | null>(fallback || null);
   const [lightbox, setLightbox] = useState<string | null>(null);
 
+  // Resolve slug from query string when not provided via path (static-shell mode)
   useEffect(() => {
+    if (slugProp) return;
+    const params = new URLSearchParams(window.location.search);
+    const qs = params.get('slug') || '';
+    if (qs) setSlug(qs);
+  }, [slugProp]);
+
+  // Sync fallback moment when slug resolves (e.g. from query string)
+  useEffect(() => {
+    if (!slug) return;
+    const fb = MOMENTS.find((m) => m.slug === slug);
+    if (fb) setMoment((prev) => prev || fb);
+  }, [slug]);
+
+  useEffect(() => {
+    if (!slug) return;
     fetch(`/api/moments/${slug}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (d) setMoment(d);
-      });
+        if (d && !d.error) setMoment(d);
+      })
+      .catch(() => {});
   }, [slug]);
 
   if (!moment) {
@@ -24,7 +42,7 @@ export default function MomentDetail({ slug }: { slug: string }) {
       <>
         <Nav />
         <div className="detail-empty">
-          <p>未找到该时刻</p>
+          <p>{slug ? '未找到该时刻' : '正在加载…'}</p>
           <a href="/album/">← 返回相册</a>
         </div>
         <Footer />

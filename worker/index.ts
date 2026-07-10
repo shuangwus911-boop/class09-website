@@ -501,7 +501,6 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
 
     // GET /api/trash — list all trashed items
     if (path === 'trash' && request.method === 'GET') {
-      if (user.role !== 'admin') return json({ error: '仅站长可查看回收站' }, 403);
       const list = await env.CLASS09_CMS.list({ prefix: 'trash:', limit: 100 });
       const items = [];
       for (const k of list.keys) {
@@ -514,7 +513,6 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
 
     // PUT /api/trash/:id — restore an item
     if (path.startsWith('trash/') && request.method === 'PUT') {
-      if (user.role !== 'admin') return json({ error: '仅站长可恢复' }, 403);
       const id = path.replace('trash/', '');
       const key = `trash:${id}`;
       const item = await env.CLASS09_CMS.get(key, 'json') as any;

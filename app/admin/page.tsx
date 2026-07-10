@@ -1006,7 +1006,7 @@ export default function AdminPage() {
         <button className={tab === 'teacher' ? 'active' : ''} onClick={() => setTab('teacher')}>班主任寄语</button>
         <button className={tab === 'capsule' ? 'active' : ''} onClick={() => setTab('capsule')}>时光胶囊</button>
         <button className={tab === 'music' ? 'active' : ''} onClick={() => setTab('music')}>班级之声</button>
-        {role === 'admin' && <button className={tab === 'trash' ? 'active' : ''} onClick={() => setTab('trash')}>回收站</button>}
+        <button className={tab === 'trash' ? 'active' : ''} onClick={() => setTab('trash')}>回收站</button>
         {role === 'admin' && <button className={tab === 'logs' ? 'active' : ''} onClick={() => setTab('logs')}>操作日志</button>}
         {role === 'admin' && <button className={tab === 'accounts' ? 'active' : ''} onClick={() => setTab('accounts')}>邀请码</button>}
       </div>
@@ -1015,7 +1015,7 @@ export default function AdminPage() {
       {tab === 'teacher' && <TeacherEditor token={token} role={role} authFetch={authFetch} />}
       {tab === 'capsule' && <CapsuleSettings authFetch={authFetch} />}
       {tab === 'music' && <MusicManager authFetch={authFetch} />}
-      {tab === 'trash' && role === 'admin' && <TrashViewer token={token} authFetch={authFetch} />}
+      {tab === 'trash' && <TrashViewer token={token} authFetch={authFetch} />}
       {tab === 'logs' && role === 'admin' && <LogViewer token={token} authFetch={authFetch} />}
       {tab === 'accounts' && role === 'admin' && <InviteManager authFetch={authFetch} />}
     </div>

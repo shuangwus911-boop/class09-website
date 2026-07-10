@@ -1225,5 +1225,6 @@ button { font-family: inherit; }
   .teacher-quote::before { display: none; }
   .teacher-more { position: static; display: block; margin-top: 14px; }
   .capsule-hero-stat { gap: 18px; }
-  .class-music { right: 12px; bottom: 12px; }
+  .class-music-disc { right: 14px; bottom: 14px; width: 44px; height: 44px; }
+  .class-music-reopen { right: 14px; bottom: 14px; width: 44px; height: 44px; font-size: 20px; }
 }

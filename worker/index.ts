@@ -163,7 +163,8 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     if (path === 'login' && request.method === 'POST') {
       const { email, password } = await request.json() as any;
       const stored = await env.CLASS09_CMS.get(`admin:${email}`);
-      if (!stored) return json({ error: '账号不存在' }, 401);
+      const genericError = '邮箱或密码错误';
+      if (!stored) return json({ error: genericError }, 401);
 
       // Support both old format (plain hash) and new format (JSON with role)
       let storedHash: string;
@@ -177,7 +178,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       }
 
       const inputHash = await sha256(password);
-      if (inputHash !== storedHash) return json({ error: '密码错误' }, 401);
+      if (inputHash !== storedHash) return json({ error: genericError }, 401);
       // Update login stats (async, don't block response)
       const now = Date.now();
       let loginCount = 1;
@@ -350,15 +351,19 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
 
       const allowed = [
         'image/jpeg', 'image/png', 'image/webp', 'image/gif',
-        'audio/mpeg', 'audio/mp3', 'audio/mp4', 'audio/x-m4a', 'audio/m4a', 'audio/ogg', 'audio/wav', 'audio/wave', 'audio/x-wav',
+        'audio/mpeg', 'audio/m4a', 'audio/x-m4a', 'audio/ogg', 'audio/wav', 'audio/wave', 'audio/x-wav',
       ];
       if (!allowed.includes(file.type)) {
-        return json({ error: '仅支持 jpg/png/webp/gif 图片或 mp3/m4a/ogg/wav 音频格式' }, 400);
+        return json({ error: '仅支持 jpg/png/webp/gif 图片或 m4a/ogg/wav 音频格式' }, 400);
       }
       const isAudio = file.type.startsWith('audio/');
       const maxSize = isAudio ? 10 * 1024 * 1024 : 2 * 1024 * 1024;
       if (file.size > maxSize) {
         return json({ error: isAudio ? '音频文件不能超过 10MB' : '图片文件不能超过 2MB，请先压缩后再上传' }, 400);
+      }
+      // Sanitize key: only allow safe characters, prevent path traversal
+      if (!/^[a-zA-Z0-9][a-zA-Z0-9_.\/-]*$/.test(key) || key.includes('..') || key.startsWith('/')) {
+        return json({ error: '文件路径包含不安全字符' }, 400);
       }
 
       await env.IMAGES.put(key, file.stream(), {
@@ -381,6 +386,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     }
 
     if (path === 'moments' && request.method === 'PUT') {
+      if (user.role !== 'admin') return json({ error: '仅站长可覆写数据集' }, 403);
       const body = await request.json();
       await env.CLASS09_CMS.put('moments', JSON.stringify(body));
       await writeLog(env.CLASS09_CMS, 'update_moments', user.email);
@@ -410,6 +416,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     }
 
     if (path === 'honors' && request.method === 'PUT') {
+      if (user.role !== 'admin') return json({ error: '仅站长可覆写数据集' }, 403);
       const body = await request.json();
       await env.CLASS09_CMS.put('honors', JSON.stringify(body));
       await writeLog(env.CLASS09_CMS, 'update_honors', user.email);
@@ -417,6 +424,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     }
 
     if (path === 'quotes' && request.method === 'PUT') {
+      if (user.role !== 'admin') return json({ error: '仅站长可覆写数据集' }, 403);
       const body = await request.json();
       await env.CLASS09_CMS.put('quotes', JSON.stringify(body));
       await writeLog(env.CLASS09_CMS, 'update_quotes', user.email);
@@ -462,7 +470,8 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       if (user.role !== 'admin') return json({ error: '仅站长可生成邀请码' }, 403);
       const { role: inviteRole, note } = await request.json() as any;
       const role = ['admin', 'editor'].includes(inviteRole) ? inviteRole : 'editor';
-      const code = Math.random().toString(36).slice(2, 8).toUpperCase();
+      const bytes = crypto.getRandomValues(new Uint8Array(4));
+      const code = Array.from(bytes, b => b.toString(36).padStart(2, '0')).join('').slice(0, 6).toUpperCase();
       const invite = { code, role, note: note || '', createdBy: user.email, createdAt: Date.now() };
       await env.CLASS09_CMS.put(`invite:${code}`, JSON.stringify(invite), { expirationTtl: 7 * 24 * 3600 }); // 7 days
       await writeLog(env.CLASS09_CMS, 'create_invite', user.email, `${code} (${role})`);

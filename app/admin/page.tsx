@@ -80,8 +80,8 @@ function AdminLogin({ onLogin }: { onLogin: (token: string, role: string) => voi
       const data = await res.json();
       if (!res.ok) { setError(data.error); return; }
       localStorage.setItem('cms_token', data.token);
-      localStorage.setItem('cms_role', data.role || 'admin');
-      onLogin(data.token, data.role || 'admin');
+      localStorage.setItem('cms_role', data.role || 'editor');
+      onLogin(data.token, data.role || 'editor');
     } catch {
       setError('网络错误');
     }
@@ -287,8 +287,8 @@ function MomentEditor({ token, role, authFetch }: { token: string; role: string;
   };
 
   const uploadPhoto = async (momentIdx: number, file: File) => {
-    const m = moments[momentIdx];
     const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+    const m = moments[momentIdx];
     const key = `${m.slug}/${Date.now()}-${Math.random().toString(36).slice(2, 6)}.${ext}`;
     const formData = new FormData();
     formData.append('file', file);
@@ -298,9 +298,12 @@ function MomentEditor({ token, role, authFetch }: { token: string; role: string;
       const data = await res.json();
       if (data.ok && data.url) {
         const newPhoto = { id: key.split('/').pop()?.replace(/\.\w+$/, '') || `p-${Date.now()}`, caption: file.name.replace(/\.\w+$/, ''), src: data.url };
-        const updated = [...moments];
-        updated[momentIdx] = { ...m, photos: [...m.photos, newPhoto], count: (m.count || 0) + 1 };
-        setMoments(updated);
+        setMoments(prev => {
+          const updated = [...prev];
+          const cur = updated[momentIdx];
+          updated[momentIdx] = { ...cur, photos: [...cur.photos, newPhoto], count: (cur.count || 0) + 1 };
+          return updated;
+        });
       } else {
         alert(data.error || '上传失败');
       }
@@ -339,7 +342,7 @@ function MomentEditor({ token, role, authFetch }: { token: string; role: string;
         {moments.map((m, i) => (
           <MomentCard key={m.slug} moment={m} role={role}
             onChange={upd => { const n = [...moments]; n[i] = upd; setMoments(n); }}
-            onRemove={() => { if (confirm('删除「' + (m.title || '未命名') + '」？')) setMoments(moments.filter((_, j) => j !== i)); }}
+            onRemove={async () => { if (confirm('删除「' + (m.title || '未命名') + '」？')) { await trashToKV(authFetch, 'moment', m, m.title, m.slug); setMoments(moments.filter((_, j) => j !== i)); } }}
             onPublish={() => publish(m.slug)}
             onUnpublish={() => unpublish(m.slug)}
             onUploadPhoto={(file: File) => uploadPhoto(i, file)}
@@ -396,7 +399,7 @@ function HonorEditor({ token, authFetch }: { token: string; authFetch: any }) {
           <div key={h.id} className="admin-card">
             <div className="admin-card-header">
               <span className="admin-card-badge" style={{ background: 'var(--badge-blue)' }}>{h.date || '未设置日期'}</span>
-              <button className="admin-btn-icon" onClick={() => { if (confirm('删除「' + (h.title || '未命名') + '」？')) setHonors(honors.filter((_, j) => j !== i)); }} title="删除此条">×</button>
+              <button className="admin-btn-icon" onClick={async () => { if (confirm('删除「' + (h.title || '未命名') + '」？」')) { await trashToKV(authFetch, 'honor', h, h.title); setHonors(honors.filter((_, j) => j !== i)); } }} title="删除此条">×</button>
             </div>
             <div className="admin-card-grid">
               <label><span>荣誉名称</span><input value={h.title} onChange={e => { const n = [...honors]; n[i] = { ...h, title: e.target.value }; setHonors(n); }} /></label>
@@ -777,7 +780,7 @@ function TeacherEditor({ token, role, authFetch }: { token: string; role: string
                 </div>
                 <div style={{ display: 'flex', gap: 6 }}>
                   {role === 'admin' && <button className="admin-btn-icon" onClick={() => upd(i, 'status', isDraft ? 'published' : 'draft')} title={isDraft ? '发布' : '下架'} style={{ color: isDraft ? 'var(--sage-deep)' : 'var(--warm-orange)', borderColor: isDraft ? 'var(--sage-deep)' : 'var(--warm-orange)' }}>{isDraft ? '✓' : '↓'}</button>}
-                  <button className="admin-btn-icon" onClick={() => { if (confirm('删除这封寄语？')) setLetters(letters.filter((_, j) => j !== i)); }} title="删除此条">×</button>
+                  <button className="admin-btn-icon" onClick={async () => { if (confirm('删除这封寄语？')) { await trashToKV(authFetch, 'teacher_letter', l, l.title || l.yearLabel); setLetters(letters.filter((_, j) => j !== i)); } }} title="删除此条">×</button>
                 </div>
               </div>
               <div className="admin-card-grid">
@@ -1016,7 +1019,7 @@ export default function AdminPage() {
 
   useEffect(() => {
     const stored = localStorage.getItem('cms_token');
-    const storedRole = localStorage.getItem('cms_role') || 'admin';
+    const storedRole = localStorage.getItem('cms_role') || 'editor';
     if (stored) { setToken(stored); setRole(storedRole); }
   }, []);
 

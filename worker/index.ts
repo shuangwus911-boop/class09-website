@@ -285,9 +285,9 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
         const meta = await env.CLASS09_CMS.get('capsule_meta', 'json') as any | null;
         return json({
           count: (list || []).length,
-          openDate: meta?.openDate || '2032-06-30',
-          title: meta?.title || '写给 2032 年毕业的我',
-          intro: meta?.intro || '每个小朋友都写下一封信，装进这枚时光胶囊。它会一直沉睡，直到 2032 年夏天毕业那天，才被一封封开启。',
+          openDate: meta?.openDate || '2031-06-30',
+          title: meta?.title || '写给 2031 年毕业的我',
+          intro: meta?.intro || '每个小朋友都写下一封信，装进这枚时光胶囊。它会一直沉睡，直到 2031 年夏天毕业那天，才被一封封开启。',
         });
       }
       // GET /api/teacher — teacher letters (published only; ?all=1 + token for drafts)

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Moment } from '@/data/moments';
+import { photoCount } from '@/data/moments';
 import MomentCover from '@/components/illust/MomentCovers';
 import FanPhoto from '@/components/illust/FanPhotos';
 
@@ -50,8 +51,8 @@ export default function MomentCarousel({ moments }: Props) {
                 <div className={`moment-badge ${m.badgeColor ?? ''}`}>{m.date}</div>
                 <div className="moment-card">
                   <div className="moment-cover">
-                    <div className="moment-count">共 · {m.count} 张</div>
-                    <MomentCover slug={m.slug} />
+                    <div className="moment-count">共 · {photoCount(m)} 张</div>
+                    <MomentCover slug={m.slug} cover={m.cover} photos={m.photos} />
                   </div>
                   <div className="moment-title">{m.title}</div>
                   <div className="moment-meta">
@@ -70,7 +71,7 @@ export default function MomentCarousel({ moments }: Props) {
                 <div className="fan">
                   {m.photos.slice(0, 5).map((p, idx) => (
                     <div key={p.id} className="fan-photo">
-                      <FanPhoto slug={m.slug} idx={idx} src={p.src} />
+                      <FanPhoto slug={m.slug} idx={idx} src={p.thumb ?? p.src} />
                       <div className="cap">{p.caption}</div>
                     </div>
                   ))}

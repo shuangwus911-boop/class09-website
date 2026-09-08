@@ -6,6 +6,8 @@ export type Photo = {
   caption: string;
   // 静态资源路径（放到 /public/images/<slug>/）或未来接入 R2 后的 URL
   src?: string;
+  // 800px 长边缩略图，供封面/网格等小尺寸展示位使用；点开大图仍读 src
+  thumb?: string;
 };
 
 export type Quote = {
@@ -25,6 +27,11 @@ export type Moment = {
   photos: Photo[];    // 扇形展开时前几张
   quote?: Quote;      // 那一天的童言
 };
+
+// 「共 N 张」的唯一口径：已上传照片时用真实张数，未上传时才回退到手填的 count
+export function photoCount(m: Pick<Moment, 'count' | 'photos'>): number {
+  return (m.photos || []).filter((p) => p.src).length || m.count || 0;
+}
 
 export const MOMENTS: Moment[] = [
   {

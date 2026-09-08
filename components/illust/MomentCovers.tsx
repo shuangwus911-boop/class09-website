@@ -1,8 +1,25 @@
-// 每个"时刻"的封面场景插画。用 slug 分发。
+// 封面优先用真实照片；无照片时回退到按 slug 分发的场景插画。
 
-type Props = { slug: string };
+type Props = { slug: string; cover?: string; photos?: { src?: string; thumb?: string }[] };
 
-export default function MomentCover({ slug }: Props) {
+export default function MomentCover({ slug, cover, photos }: Props) {
+  // 旧数据的 cover 是 'firstDay' 这类插画 key，不是地址，需要排除
+  const coverSrc = cover && /^(\/|https?:\/\/)/.test(cover) ? cover : undefined;
+  // 封面只绘制约 420×310 设备像素，优先用缩略图，不为此拉数 MB 原图
+  const first = photos?.find((p) => p.thumb || p.src);
+  const src = coverSrc ?? first?.thumb ?? first?.src;
+
+  if (src) {
+    return (
+      <img
+        src={src}
+        alt=""
+        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+        loading="lazy"
+      />
+    );
+  }
+
   switch (slug) {
     case 'first-day':
       return (

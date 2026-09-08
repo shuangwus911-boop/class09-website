@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Nav from '@/components/layout/Nav';
 import Footer from '@/components/layout/Footer';
-import { MOMENTS } from '@/data/moments';
+import { MOMENTS, photoCount } from '@/data/moments';
 import type { Moment } from '@/data/moments';
 
 export default function MomentDetail({ slug: slugProp }: { slug?: string }) {
@@ -69,7 +69,7 @@ export default function MomentDetail({ slug: slugProp }: { slug?: string }) {
         <div className="detail-meta">
           <span>{moment.date}</span>
           <span>·</span>
-          <span>共 {moment.count} 张照片</span>
+          <span>共 {photoCount(moment)} 张照片</span>
         </div>
       </div>
 
@@ -81,10 +81,7 @@ export default function MomentDetail({ slug: slugProp }: { slug?: string }) {
               className="detail-photo"
               onClick={() => setLightbox(photo.src!)}
             >
-              <img src={photo.src} alt={photo.caption} loading="lazy" />
-              {photo.caption && (
-                <div className="detail-photo-cap">{photo.caption}</div>
-              )}
+              <img src={photo.thumb ?? photo.src} alt={photo.caption || ''} loading="lazy" />
             </div>
           ))}
         </div>

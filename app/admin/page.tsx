@@ -12,7 +12,7 @@ type Moment = {
   count: number;
   badgeColor?: string;
   cover: string;
-  photos: { id: string; caption: string; src?: string }[];
+  photos: { id: string; caption: string; src?: string; thumb?: string }[];
   quote?: { text: string; who: string; date: string };
   status?: 'draft' | 'published';
 };
@@ -47,6 +47,50 @@ function useAuthFetch(token: string, onExpired: () => void) {
     }
     return res;
   }, [token, onExpired]);
+}
+
+// --- Shared: 浏览器端生成 800px 长边缩略图 ---
+// 封面/网格只绘制不到 600 设备像素，用缩略图可省掉 ~88% 流量；大图仍读原图。
+// 逐级折半而非一次性降采样：既保画质，也避免创建超过 Safari 像素上限的巨型 canvas。
+const THUMB_MAX_EDGE = 800;
+
+async function makeThumbBlob(file: File): Promise<Blob | null> {
+  if (typeof createImageBitmap !== 'function') return null;
+  let bmp: ImageBitmap;
+  try {
+    bmp = await createImageBitmap(file);
+  } catch {
+    return null;
+  }
+  try {
+    let w = bmp.width;
+    let h = bmp.height;
+    if (Math.max(w, h) <= THUMB_MAX_EDGE) return null;
+    let src: CanvasImageSource = bmp;
+    while (Math.max(w, h) > THUMB_MAX_EDGE) {
+      const scale = Math.max(0.5, THUMB_MAX_EDGE / Math.max(w, h));
+      const nw = Math.max(1, Math.round(w * scale));
+      const nh = Math.max(1, Math.round(h * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = nw;
+      canvas.height = nh;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return null;
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(src, 0, 0, nw, nh);
+      src = canvas;
+      w = nw;
+      h = nh;
+    }
+    return await new Promise<Blob | null>((resolve) =>
+      (src as HTMLCanvasElement).toBlob(resolve, 'image/jpeg', 0.82)
+    );
+  } catch {
+    return null;
+  } finally {
+    bmp.close?.();
+  }
 }
 
 // --- Shared: move deleted item to trash KV ---
@@ -186,7 +230,9 @@ function MomentCard({ moment, onChange, onRemove, role, onPublish, onUnpublish, 
         <label><span>标题</span><input value={moment.title} onChange={e => update('title', e.target.value)} placeholder="开学第一天" /></label>
         <label><span>日期</span><input value={moment.date} onChange={e => update('date', e.target.value)} placeholder="2025.09.01" /></label>
         <label><span>学期</span><input value={moment.semester} onChange={e => update('semester', e.target.value)} placeholder="2025 秋 · 一上" /></label>
-        <label><span>照片数</span><input type="number" value={moment.count} onChange={e => update('count', parseInt(e.target.value) || 0)} /></label>
+        {photos.some(p => p.src)
+          ? <label><span>照片数</span><input type="number" value={photos.filter(p => p.src).length} readOnly title="已按实际上传张数自动统计" /></label>
+          : <label><span>照片数</span><input type="number" value={moment.count} onChange={e => update('count', parseInt(e.target.value) || 0)} /></label>}
         <label><span>色标</span>
           <select value={moment.badgeColor || 'red'} onChange={e => update('badgeColor', e.target.value)}>
             <option value="red">红</option><option value="green">绿</option><option value="orange">橙</option><option value="blue">蓝</option><option value="purple">紫</option>
@@ -211,7 +257,7 @@ function MomentCard({ moment, onChange, onRemove, role, onPublish, onUnpublish, 
           <div className="admin-upload-grid">
             {photos.map((p, idx) => (
               <div key={p.id || idx} className="admin-upload-thumb" style={{ position: 'relative' }}>
-                {p.src ? <img src={p.src} alt={p.caption || ''} /> : (
+                {p.src ? <img src={p.thumb ?? p.src} alt={p.caption || ''} /> : (
                   <div style={{ width: '100%', height: '100%', background: 'var(--paper-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--ink-soft)' }}>
                     {p.caption || '无标题'}
                   </div>
@@ -303,11 +349,26 @@ function MomentEditor({ token, role, authFetch }: { token: string; role: string;
       const res = await authFetch(`${API_BASE}/upload`, { method: 'POST', body: formData });
       const data = await res.json();
       if (data.ok && data.url) {
-        const newPhoto = { id: key.split('/').pop()?.replace(/\.\w+$/, '') || `p-${Date.now()}`, caption: file.name.replace(/\.\w+$/, ''), src: data.url };
+        // 缩略图是纯优化项：失败就留空，前台自动回退原图
+        let thumbUrl: string | undefined;
+        try {
+          const blob = await makeThumbBlob(file);
+          if (blob) {
+            const thumbKey = key.replace(/\.\w+$/, '') + '-thumb.jpg';
+            const tf = new FormData();
+            tf.append('file', new File([blob], 'thumb.jpg', { type: 'image/jpeg' }));
+            tf.append('key', thumbKey);
+            const tr = await authFetch(`${API_BASE}/upload`, { method: 'POST', body: tf });
+            const td = await tr.json();
+            if (td.ok && td.url) thumbUrl = td.url;
+          }
+        } catch {}
+        const newPhoto = { id: key.split('/').pop()?.replace(/\.\w+$/, '') || `p-${Date.now()}`, caption: '', src: data.url, ...(thumbUrl ? { thumb: thumbUrl } : {}) };
         setMoments(prev => {
           const updated = [...prev];
           const cur = updated[momentIdx];
-          updated[momentIdx] = { ...cur, photos: [...cur.photos, newPhoto], count: (cur.count || 0) + 1 };
+          const photos = [...cur.photos, newPhoto];
+          updated[momentIdx] = { ...cur, photos, count: photos.length };
           return updated;
         });
       } else {
@@ -327,6 +388,10 @@ function MomentEditor({ token, role, authFetch }: { token: string; role: string;
     if (photo.src) {
       const r2key = photo.src.replace('/images/', '');
       try { await authFetch(`${API_BASE}/images/${r2key}`, { method: 'DELETE' }); } catch {}
+    }
+    if (photo.thumb) {
+      const thumbKey = photo.thumb.replace('/images/', '');
+      try { await authFetch(`${API_BASE}/images/${thumbKey}`, { method: 'DELETE' }); } catch {}
     }
     const photos = m.photos.filter((_, i) => i !== photoIdx);
     const updated = [...moments];

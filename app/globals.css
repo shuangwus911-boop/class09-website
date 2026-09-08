@@ -955,6 +955,8 @@ button { font-family: inherit; }
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 12px;
+  /* 不拉伸：横版照片不被同行竖版照片撑出底部空白 */
+  align-items: start;
   margin-bottom: 32px;
 }
 .detail-photo {
@@ -970,12 +972,6 @@ button { font-family: inherit; }
 }
 .detail-photo img {
   width: 100%; display: block;
-}
-.detail-photo-cap {
-  position: absolute; bottom: 0; left: 0; right: 0;
-  padding: 20px 10px 8px;
-  background: linear-gradient(transparent, rgba(61,47,33,0.7));
-  font-size: 11px; color: var(--cream); letter-spacing: 1.5px;
 }
 
 .detail-placeholder {

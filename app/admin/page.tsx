@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 const API_BASE = '/api';
 
@@ -215,7 +215,7 @@ function MomentCard({ moment, onChange, onRemove, onPublish, onUnpublish, onUplo
   onRemove: () => void;
   onPublish: () => void;
   onUnpublish: () => void;
-  onUploadPhoto: (file: File) => void;
+  onUploadPhoto: (file: File) => Promise<void>;
   onDeletePhoto: (idx: number) => void;
 }) {
   const update = (field: string, value: any) => onChange({ ...moment, [field]: value });
@@ -226,13 +226,13 @@ function MomentCard({ moment, onChange, onRemove, onPublish, onUnpublish, onUplo
   const isDraft = moment.status === 'draft';
   const photos = moment.photos || [];
 
-  const handleFile = (file: File) => {
+  const handleFile = async (file: File) => {
     // 压缩由 uploadPhoto 负责；这里只挡住连解码都不划算的超大文件
     if (file.size > 30 * 1024 * 1024) {
       alert(`图片「${file.name}」有 ${(file.size / 1024 / 1024).toFixed(1)}MB，太大了，请先手动压缩后再上传`);
       return;
     }
-    onUploadPhoto(file);
+    await onUploadPhoto(file);
   };
 
   return (
@@ -270,8 +270,10 @@ function MomentCard({ moment, onChange, onRemove, onPublish, onUnpublish, onUplo
           <label style={{ cursor: 'pointer' }}>
             <span className="admin-btn-icon" style={{ fontSize: 11, width: 'auto', padding: '3px 12px' }}>+ 上传照片</span>
             <input type="file" accept="image/*" multiple style={{ display: 'none' }}
-              onChange={e => {
-                if (e.target.files) { Array.from(e.target.files).forEach(f => handleFile(f)); e.target.value = ''; }
+              onChange={async e => {
+                const files = e.target.files ? Array.from(e.target.files) : [];
+                e.target.value = '';
+                for (const f of files) await handleFile(f);
               }}
             />
           </label>
@@ -311,58 +313,85 @@ function MomentCard({ moment, onChange, onRemove, onPublish, onUnpublish, onUplo
 // --- Moment Editor ---
 function MomentEditor({ token, authFetch }: { token: string; authFetch: any }) {
   const [moments, setMoments] = useState<Moment[]>([]);
+  // 一次上传里连着几个 await，闭包里的 moments 是旧值，用 ref 拿当前值
+  const momentsRef = useRef<Moment[]>([]);
+  const [dirty, setDirty] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState(false);
 
+  const applyMoments = (next: Moment[]) => { momentsRef.current = next; setMoments(next); };
+  const markDirty = (slug: string) => setDirty(prev => prev.includes(slug) ? prev : [...prev, slug]);
+  const clearDirty = (slug: string) => setDirty(prev => prev.filter(s => s !== slug));
+
   useEffect(() => {
     fetch(`${API_BASE}/moments?all=1`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.ok ? r.json() : Promise.reject(new Error('加载失败')))
-      .then(d => { if (Array.isArray(d)) { setMoments(d); setLoaded(true); } else { setLoadError(true); } })
+      .then(d => { if (Array.isArray(d)) { applyMoments(d); setLoaded(true); } else { setLoadError(true); } })
       .catch(() => setLoadError(true));
   }, [token]);
 
-  const save = async () => {
-    if (!loaded) { setMsg('数据尚未成功加载，暂不能保存（避免覆盖云端）'); setTimeout(() => setMsg(''), 3000); return; }
-    if (moments.length === 0 && !confirm('当前列表为空，保存会清空线上所有时光相册。确定要继续吗？')) return;
-    setSaving(true);
+  useEffect(() => {
+    if (dirty.length === 0) return;
+    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [dirty.length]);
+
+  // 单条落库。上传照片、删照片都直接调它，不再等用户点保存。
+  const persist = async (m: Moment): Promise<boolean> => {
     try {
-      await authFetch(`${API_BASE}/moments`, {
+      const res = await authFetch(`${API_BASE}/moments/${encodeURIComponent(m.slug)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(moments),
+        body: JSON.stringify(m),
       });
-      setMsg('已保存');
-    } catch (e: any) { setMsg(e.message); }
+      return res.ok;
+    } catch { return false; }
+  };
+
+  const save = async () => {
+    if (!loaded) { setMsg('数据尚未成功加载，暂不能保存（避免覆盖云端）'); setTimeout(() => setMsg(''), 3000); return; }
+    const pending = momentsRef.current.filter(m => dirty.includes(m.slug));
+    if (pending.length === 0) { setMsg('没有待保存的改动'); setTimeout(() => setMsg(''), 2000); return; }
+    setSaving(true);
+    const failed: string[] = [];
+    for (const m of pending) {
+      if (!(await persist(m))) failed.push(m.slug);
+    }
+    setDirty(failed);
+    setMsg(failed.length ? `${pending.length - failed.length} 条已保存，${failed.length} 条失败，请重试` : '已保存');
     setSaving(false);
-    setTimeout(() => setMsg(''), 2000);
+    setTimeout(() => setMsg(''), failed.length ? 4000 : 2000);
   };
 
   const add = () => {
     const d = new Date();
-    setMoments([...moments, {
-      slug: `moment-${Date.now()}`, title: '', date: `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`,
+    const slug = `moment-${Date.now()}`;
+    applyMoments([...momentsRef.current, {
+      slug, title: '', date: `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`,
       semester: '', count: 0, badgeColor: 'red', cover: '', photos: [], status: 'draft',
     }]);
+    markDirty(slug);
   };
 
   const publish = async (slug: string) => {
     try {
       await authFetch(`${API_BASE}/moments/${slug}/publish`, { method: 'PUT' });
-      setMoments(moments.map(m => m.slug === slug ? { ...m, status: 'published' } : m));
+      applyMoments(momentsRef.current.map(m => m.slug === slug ? { ...m, status: 'published' } : m));
     } catch {}
   };
 
   const unpublish = async (slug: string) => {
     try {
       await authFetch(`${API_BASE}/moments/${slug}/unpublish`, { method: 'PUT' });
-      setMoments(moments.map(m => m.slug === slug ? { ...m, status: 'draft' } : m));
+      applyMoments(momentsRef.current.map(m => m.slug === slug ? { ...m, status: 'draft' } : m));
     } catch {}
   };
 
   const uploadPhoto = async (momentIdx: number, file: File) => {
-    const m = moments[momentIdx];
+    const m = momentsRef.current[momentIdx];
     // 手机直出照片常有 4-8MB，先在浏览器压到 2000px / JPEG 0.85 再传
     let payload: Blob = file;
     let ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
@@ -400,13 +429,13 @@ function MomentEditor({ token, authFetch }: { token: string; authFetch: any }) {
           }
         } catch {}
         const newPhoto = { id: key.split('/').pop()?.replace(/\.\w+$/, '') || `p-${Date.now()}`, caption: '', src: data.url, ...(thumbUrl ? { thumb: thumbUrl } : {}) };
-        setMoments(prev => {
-          const updated = [...prev];
-          const cur = updated[momentIdx];
-          const photos = [...cur.photos, newPhoto];
-          updated[momentIdx] = { ...cur, photos, count: photos.length };
-          return updated;
-        });
+        const cur = momentsRef.current[momentIdx];
+        const photos = [...cur.photos, newPhoto];
+        const updated = { ...cur, photos, count: photos.length };
+        applyMoments(momentsRef.current.map((x, i) => i === momentIdx ? updated : x));
+        // 图片已经躺在 R2 里了，不落库的话刷新一下就只剩孤儿文件
+        if (await persist(updated)) clearDirty(updated.slug);
+        else { markDirty(updated.slug); setMsg('照片已上传但保存失败，请点「保存所有更改」重试'); setTimeout(() => setMsg(''), 4000); }
       } else {
         alert(data.error || '上传失败');
       }
@@ -416,11 +445,20 @@ function MomentEditor({ token, authFetch }: { token: string; authFetch: any }) {
   };
 
   const deletePhoto = async (momentIdx: number, photoIdx: number) => {
-    const m = moments[momentIdx];
+    const m = momentsRef.current[momentIdx];
     const photo = m.photos[photoIdx];
     if (!confirm(`删除图片「${photo.caption || photo.id}」？`)) return;
     // Save to trash before deleting
     await trashToKV(authFetch, 'moment_photo', photo, photo.caption || photo.id, m.slug);
+    const photos = m.photos.filter((_, i) => i !== photoIdx);
+    const updated = { ...m, photos, count: photos.length };
+    // 必须先落库再删 R2：反过来一旦保存失败，前台就会指着已经不存在的图片
+    if (!(await persist(updated))) {
+      alert('保存失败，图片未删除，请重试');
+      return;
+    }
+    applyMoments(momentsRef.current.map((x, i) => i === momentIdx ? updated : x));
+    clearDirty(updated.slug);
     if (photo.src) {
       const r2key = photo.src.replace('/images/', '');
       try { await authFetch(`${API_BASE}/images/${r2key}`, { method: 'DELETE' }); } catch {}
@@ -429,10 +467,6 @@ function MomentEditor({ token, authFetch }: { token: string; authFetch: any }) {
       const thumbKey = photo.thumb.replace('/images/', '');
       try { await authFetch(`${API_BASE}/images/${thumbKey}`, { method: 'DELETE' }); } catch {}
     }
-    const photos = m.photos.filter((_, i) => i !== photoIdx);
-    const updated = [...moments];
-    updated[momentIdx] = { ...m, photos, count: photos.length };
-    setMoments(updated);
   };
 
   const drafts = moments.filter(m => m.status === 'draft');
@@ -446,11 +480,12 @@ function MomentEditor({ token, authFetch }: { token: string; authFetch: any }) {
       </div>
       {loadError && <p className="admin-hint" style={{ color: 'var(--warm-orange)', fontWeight: 600 }}>⚠ 数据加载失败，为保护线上内容已禁用保存。请刷新页面重试。</p>}
       {drafts.length > 0 && <p className="admin-hint">橙色边框 = 草稿，发布后前台才可见</p>}
+      {dirty.length > 0 && <p className="admin-hint" style={{ color: 'var(--warm-orange)', fontWeight: 600 }}>有 {dirty.length} 处改动未保存（照片上传和删除已自动保存）</p>}
       <div className="admin-card-list">
         {moments.map((m, i) => (
           <MomentCard key={m.slug} moment={m}
-            onChange={upd => { const n = [...moments]; n[i] = upd; setMoments(n); }}
-            onRemove={async () => { if (confirm('删除「' + (m.title || '未命名') + '」？')) { await trashToKV(authFetch, 'moment', m, m.title, m.slug); setMoments(moments.filter((_, j) => j !== i)); } }}
+            onChange={upd => { applyMoments(momentsRef.current.map((x, j) => j === i ? upd : x)); markDirty(upd.slug); }}
+            onRemove={async () => { if (confirm('删除「' + (m.title || '未命名') + '」？')) { await trashToKV(authFetch, 'moment', m, m.title, m.slug); await authFetch(`${API_BASE}/moments/${encodeURIComponent(m.slug)}`, { method: 'DELETE' }); applyMoments(momentsRef.current.filter((_, j) => j !== i)); clearDirty(m.slug); } }}
             onPublish={() => publish(m.slug)}
             onUnpublish={() => unpublish(m.slug)}
             onUploadPhoto={(file: File) => uploadPhoto(i, file)}
@@ -514,7 +549,7 @@ function HonorEditor({ token, authFetch }: { token: string; authFetch: any }) {
           <div key={h.id} className="admin-card">
             <div className="admin-card-header">
               <span className="admin-card-badge" style={{ background: 'var(--badge-blue)' }}>{h.date || '未设置日期'}</span>
-              <button className="admin-btn-icon" onClick={async () => { if (confirm('删除「' + (h.title || '未命名') + '」？')) { await trashToKV(authFetch, 'honor', h, h.title); setHonors(honors.filter((_, j) => j !== i)); } }} title="删除此条">×</button>
+              <button className="admin-btn-icon" onClick={async () => { if (confirm('删除「' + (h.title || '未命名') + '」？')) { await trashToKV(authFetch, 'honor', h, h.title); await authFetch(`${API_BASE}/honors/${encodeURIComponent(h.id)}`, { method: 'DELETE' }); setHonors(honors.filter((_, j) => j !== i)); } }} title="删除此条">×</button>
             </div>
             <div className="admin-card-grid">
               <label><span>荣誉名称</span><input value={h.title} onChange={e => { const n = [...honors]; n[i] = { ...h, title: e.target.value }; setHonors(n); }} /></label>
@@ -632,8 +667,12 @@ function InviteManager({ authFetch }: { authFetch: any }) {
   const revoke = async (code: string) => {
     if (!confirm(`撤销邀请码 ${code}？`)) return;
     try {
-      await authFetch(`${API_BASE}/invite/${code}`, { method: 'DELETE' });
+      const res = await authFetch(`${API_BASE}/invite/${code}`, { method: 'DELETE' });
+      const data = await res.json();
       setInvites(invites.filter(i => i.code !== code));
+      if (data.usedBy) {
+        setMsg(`邀请码 ${code} 已撤销，但用它注册的账号 ${data.usedBy} 仍可登录——要收回权限请到「账号」页删除该账号。`);
+      }
     } catch {}
   };
 
@@ -719,6 +758,148 @@ function InviteManager({ authFetch }: { authFetch: any }) {
         </div>
       )}
       {!loading && invites.length === 0 && <p style={{ fontSize: 12, color: 'var(--ink-soft)' }}>暂无邀请码</p>}
+    </div>
+  );
+}
+
+// --- 自助改密（改完所有旧会话失效，必须重新登录）---
+function PasswordChange({ authFetch, onDone }: { authFetch: any; onDone: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [oldPassword, setOld] = useState('');
+  const [newPassword, setNew] = useState('');
+  const [msg, setMsg] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMsg('');
+    setSaving(true);
+    try {
+      const res = await authFetch(`${API_BASE}/password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ oldPassword, newPassword }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setMsg('密码已修改，需要重新登录…');
+        setTimeout(onDone, 1200);
+      } else setMsg(data.error || '修改失败');
+    } catch (e: any) { setMsg(e.message); }
+    setSaving(false);
+  };
+
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)} style={{ fontSize: 12, padding: '6px 14px', background: 'none', border: '1px solid var(--ink-soft)', color: 'var(--ink-soft)', cursor: 'pointer', letterSpacing: 2 }}>改密</button>
+    );
+  }
+
+  return (
+    <form onSubmit={submit} style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+      <input type="password" value={oldPassword} onChange={e => setOld(e.target.value)} placeholder="原密码" autoComplete="current-password" style={{ padding: '5px 8px', fontSize: 12, width: 110, border: '1px solid rgba(61,47,33,0.25)', background: 'var(--cream)', fontFamily: 'inherit' }} />
+      <input type="password" value={newPassword} onChange={e => setNew(e.target.value)} placeholder="新密码（≥8位）" autoComplete="new-password" style={{ padding: '5px 8px', fontSize: 12, width: 130, border: '1px solid rgba(61,47,33,0.25)', background: 'var(--cream)', fontFamily: 'inherit' }} />
+      <button type="submit" disabled={saving} style={{ fontSize: 12, padding: '5px 12px', background: 'var(--warm-red)', color: 'var(--cream)', border: 'none', cursor: 'pointer', letterSpacing: 1 }}>确定</button>
+      <button type="button" onClick={() => { setOpen(false); setMsg(''); setOld(''); setNew(''); }} style={{ fontSize: 12, padding: '5px 10px', background: 'none', border: '1px solid var(--ink-soft)', color: 'var(--ink-soft)', cursor: 'pointer' }}>取消</button>
+      {msg && <span style={{ fontSize: 11, color: 'var(--warm-red)' }}>{msg}</span>}
+    </form>
+  );
+}
+
+// --- Account Manager (admin only) ---
+function AccountManager({ authFetch }: { authFetch: any }) {
+  const [accounts, setAccounts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [msg, setMsg] = useState('');
+
+  const load = useCallback(async () => {
+    try {
+      const res = await authFetch(`${API_BASE}/accounts`);
+      const data = await res.json();
+      if (Array.isArray(data)) setAccounts(data);
+    } catch {}
+    setLoading(false);
+  }, [authFetch]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const changeRole = async (email: string, newRole: string) => {
+    setMsg('');
+    try {
+      const res = await authFetch(`${API_BASE}/accounts/${encodeURIComponent(email)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: newRole }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setAccounts(prev => prev.map(a => a.email === email ? { ...a, role: newRole } : a));
+        setMsg(`${email} 已设为${newRole === 'admin' ? '站长' : '编辑'}，对方下次请求即生效。`);
+      } else setMsg(data.error || '修改失败');
+    } catch (e: any) { setMsg(e.message); }
+  };
+
+  const remove = async (email: string) => {
+    if (!confirm(`删除账号 ${email}？\n\n删除后该账号立刻无法登录，已经打开的后台页面也会被踢出。`)) return;
+    setMsg('');
+    try {
+      const res = await authFetch(`${API_BASE}/accounts/${encodeURIComponent(email)}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.ok) {
+        setAccounts(prev => prev.filter(a => a.email !== email));
+        setMsg(`${email} 已删除。`);
+      } else setMsg(data.error || '删除失败');
+    } catch (e: any) { setMsg(e.message); }
+  };
+
+  const fmt = (ts: number | null) => ts
+    ? new Date(ts).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+    : '从未登录';
+
+  return (
+    <div className="admin-section">
+      <div className="admin-section-top"><h3>账号管理</h3><span className="admin-count">{accounts.length} 个</span></div>
+      <p className="admin-hint">这里是所有能登录后台的账号。撤销邀请码不会删掉已注册的账号，要真正收回权限请在这里删除。</p>
+      {msg && <p style={{ fontSize: 12, color: 'var(--warm-red)', letterSpacing: 1, marginBottom: 12 }}>{msg}</p>}
+      {loading && <p style={{ fontSize: 12, color: 'var(--ink-soft)' }}>读取中…</p>}
+      {!loading && (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+            <thead><tr style={{ borderBottom: '1px solid rgba(61,47,33,0.15)', textAlign: 'left' }}>
+              <th style={{ padding: '6px 8px' }}>邮箱</th>
+              <th style={{ padding: '6px 8px' }}>角色</th>
+              <th style={{ padding: '6px 8px' }}>登录次数</th>
+              <th style={{ padding: '6px 8px' }}>最后登录</th>
+              <th style={{ padding: '6px 8px' }}>来源邀请码</th>
+              <th style={{ padding: '6px 8px' }}></th>
+            </tr></thead>
+            <tbody>
+              {accounts.map(a => (
+                <tr key={a.email} style={{ borderBottom: '1px solid rgba(61,47,33,0.08)', background: a.isSelf ? 'rgba(138,153,104,0.06)' : undefined }}>
+                  <td style={{ padding: '6px 8px', fontFamily: 'monospace', fontSize: 11 }}>
+                    {a.email}
+                    {a.isSelf && <span style={{ marginLeft: 6, color: 'var(--sage-deep)', fontSize: 10 }}>当前登录</span>}
+                  </td>
+                  <td style={{ padding: '6px 8px' }}>
+                    {a.isSelf ? (a.role === 'admin' ? '站长' : '编辑') : (
+                      <select value={a.role} onChange={e => changeRole(a.email, e.target.value)} style={{ fontSize: 11, padding: '2px 4px', background: 'var(--cream)', border: '1px solid rgba(61,47,33,0.2)', fontFamily: 'inherit' }}>
+                        <option value="editor">编辑</option>
+                        <option value="admin">站长</option>
+                      </select>
+                    )}
+                  </td>
+                  <td style={{ padding: '6px 8px' }}>{a.loginCount}</td>
+                  <td style={{ padding: '6px 8px', color: 'var(--ink-soft)', fontSize: 11 }}>{fmt(a.lastLogin)}</td>
+                  <td style={{ padding: '6px 8px', fontFamily: 'monospace', fontSize: 11, color: 'var(--ink-soft)' }}>{a.inviteCode || '—'}</td>
+                  <td style={{ padding: '6px 8px' }}>
+                    {!a.isSelf && <button onClick={() => remove(a.email)} style={{ background: 'none', border: 'none', color: 'var(--warm-red)', cursor: 'pointer', fontSize: 11 }}>删除</button>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
@@ -912,7 +1093,7 @@ function TeacherEditor({ token, role, authFetch }: { token: string; role: string
                 </div>
                 <div style={{ display: 'flex', gap: 6 }}>
                   <button className="admin-btn-icon" onClick={() => upd(i, 'status', isDraft ? 'published' : 'draft')} title={isDraft ? '发布' : '下架'} style={{ color: isDraft ? 'var(--sage-deep)' : 'var(--warm-orange)', borderColor: isDraft ? 'var(--sage-deep)' : 'var(--warm-orange)' }}>{isDraft ? '✓' : '↓'}</button>
-                  <button className="admin-btn-icon" onClick={async () => { if (confirm('删除这封寄语？')) { await trashToKV(authFetch, 'teacher_letter', l, l.title || l.yearLabel); setLetters(letters.filter((_, j) => j !== i)); } }} title="删除此条">×</button>
+                  <button className="admin-btn-icon" onClick={async () => { if (confirm('删除这封寄语？')) { await trashToKV(authFetch, 'teacher_letter', l, l.title || l.yearLabel); await authFetch(`${API_BASE}/teacher/${encodeURIComponent(l.id)}`, { method: 'DELETE' }); setLetters(letters.filter((_, j) => j !== i)); } }} title="删除此条">×</button>
                 </div>
               </div>
               <div className="admin-card-grid">
@@ -1139,7 +1320,7 @@ function TrashViewer({ token, authFetch }: { token: string; authFetch: any }) {
 export default function AdminPage() {
   const [token, setToken] = useState<string | null>(null);
   const [role, setRole] = useState<string>('admin');
-  const [tab, setTab] = useState<'moments' | 'honors' | 'teacher' | 'capsule' | 'music' | 'trash' | 'logs' | 'accounts'>('moments');
+  const [tab, setTab] = useState<'moments' | 'honors' | 'teacher' | 'capsule' | 'music' | 'trash' | 'logs' | 'invites' | 'accounts'>('moments');
 
   const logout = useCallback(() => {
     localStorage.removeItem('cms_token');
@@ -1167,6 +1348,7 @@ export default function AdminPage() {
         <h2>09班 · 内容管理 <span style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 400, marginLeft: 8 }}>{role === 'admin' ? '站长' : '编辑'}</span></h2>
         <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
           <a href="/" style={{ fontSize: 12, letterSpacing: 1, color: 'var(--ink-soft)', textDecoration: 'none', transition: 'color 0.2s' }} onMouseEnter={e => (e.currentTarget.style.color = 'var(--warm-red)')} onMouseLeave={e => (e.currentTarget.style.color = 'var(--ink-soft)')}>← 返回首页</a>
+          <PasswordChange authFetch={authFetch} onDone={logout} />
           <button onClick={logout}>退出</button>
         </div>
       </div>
@@ -1178,7 +1360,8 @@ export default function AdminPage() {
         {role === 'admin' && <button className={tab === 'music' ? 'active' : ''} onClick={() => setTab('music')}>班级之声</button>}
         <button className={tab === 'trash' ? 'active' : ''} onClick={() => setTab('trash')}>回收站</button>
         {role === 'admin' && <button className={tab === 'logs' ? 'active' : ''} onClick={() => setTab('logs')}>操作日志</button>}
-        {role === 'admin' && <button className={tab === 'accounts' ? 'active' : ''} onClick={() => setTab('accounts')}>邀请码</button>}
+        {role === 'admin' && <button className={tab === 'invites' ? 'active' : ''} onClick={() => setTab('invites')}>邀请码</button>}
+        {role === 'admin' && <button className={tab === 'accounts' ? 'active' : ''} onClick={() => setTab('accounts')}>账号</button>}
       </div>
       {tab === 'moments' && <MomentEditor token={token} authFetch={authFetch} />}
       {tab === 'honors' && <HonorEditor token={token} authFetch={authFetch} />}
@@ -1187,7 +1370,8 @@ export default function AdminPage() {
       {tab === 'music' && role === 'admin' && <MusicManager authFetch={authFetch} />}
       {tab === 'trash' && <TrashViewer token={token} authFetch={authFetch} />}
       {tab === 'logs' && role === 'admin' && <LogViewer token={token} authFetch={authFetch} />}
-      {tab === 'accounts' && role === 'admin' && <InviteManager authFetch={authFetch} />}
+      {tab === 'invites' && role === 'admin' && <InviteManager authFetch={authFetch} />}
+      {tab === 'accounts' && role === 'admin' && <AccountManager authFetch={authFetch} />}
     </div>
   );
 }

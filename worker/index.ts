@@ -25,13 +25,13 @@ async function hmacVerify(payload: string, signature: string, secret: string): P
 }
 
 async function createToken(email: string, role: string, secret: string): Promise<string> {
-  const payload = JSON.stringify({ email, role, exp: Date.now() + 7 * 24 * 60 * 60 * 1000 });
+  const payload = JSON.stringify({ email, role, iat: Date.now(), exp: Date.now() + 7 * 24 * 60 * 60 * 1000 });
   const payloadB64 = btoa(payload);
   const sig = await hmacSign(payloadB64, secret);
   return `${payloadB64}.${sig}`;
 }
 
-async function verifyToken(token: string, secret: string): Promise<{ email: string; role: string } | null> {
+async function verifyToken(token: string, secret: string): Promise<{ email: string; role: string; iat: number } | null> {
   try {
     const [payloadB64, sig] = token.split('.');
     if (!payloadB64 || !sig) return null;
@@ -39,7 +39,7 @@ async function verifyToken(token: string, secret: string): Promise<{ email: stri
     if (!valid) return null;
     const payload = JSON.parse(atob(payloadB64));
     if (payload.exp < Date.now()) return null;
-    return { email: payload.email, role: payload.role || 'admin' };
+    return { email: payload.email, role: payload.role || 'admin', iat: payload.iat || 0 };
   } catch {
     return null;
   }
@@ -68,6 +68,40 @@ async function writeLog(kv: KVNamespace, action: string, email: string, detail?:
   await kv.put(key, JSON.stringify(entry), { expirationTtl: 90 * 24 * 3600 }); // keep 90 days
 }
 
+type Account = { hash: string; role: string; [k: string]: any };
+
+// 早期账号直接存的是纯 sha256 字符串，没有 JSON 外壳
+function parseAccount(raw: string): Account {
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object') return { role: 'admin', ...parsed };
+  } catch {}
+  return { hash: raw, role: 'admin' };
+}
+
+type AuthUser = { email: string; role: string; account: Account };
+
+// token 是无状态签名，删号 / 降级 / 改密都不会让它自动失效，所以每次请求都回查账号。
+async function authenticate(request: Request, env: Env): Promise<{ user: AuthUser } | { error: Response }> {
+  const token = request.headers.get('Authorization')?.replace('Bearer ', '');
+  if (!token) return { error: json({ error: '未登录' }, 401) };
+  const payload = await verifyToken(token, env.ADMIN_SECRET);
+  if (!payload) return { error: json({ error: '登录已过期' }, 401) };
+  const raw = await env.CLASS09_CMS.get(`admin:${payload.email}`);
+  if (!raw) return { error: json({ error: '账号已被移除，请联系站长' }, 401) };
+  const account = parseAccount(raw);
+  if (account.pwChangedAt && payload.iat < account.pwChangedAt) {
+    return { error: json({ error: '密码已修改，请重新登录' }, 401) };
+  }
+  return { user: { email: payload.email, role: account.role || 'admin', account } };
+}
+
+// 草稿可见性也必须回查账号：只验签的话，删号 / 改密之后的旧 token 还能翻到未发布内容。
+async function canSeeDrafts(request: Request, env: Env): Promise<boolean> {
+  if (!request.headers.get('Authorization')) return false;
+  return 'user' in (await authenticate(request, env));
+}
+
 // 时光胶囊：孩子姓名 + 8 位生日 = 这封信属于谁。生日只做归属标识，不当凭证用，
 // 所以查询接口永远只回元信息、不回正文。
 function isValidBirthday(v: string): boolean {
@@ -82,15 +116,85 @@ function matchKeyOf(child: string, birthday: string): string {
 }
 
 // 后台童言三个框全留空也会提交 {text:'',who:'',date:''}，落库前删掉，前台才不会渲染空卡片。
+function sanitizeMoment(m: any): any {
+  if (m && m.quote && !String(m.quote.text || '').trim()) {
+    const { quote, ...rest } = m;
+    return rest;
+  }
+  return m;
+}
+
 function sanitizeMoments(list: any): any {
   if (!Array.isArray(list)) return list;
-  return list.map((m: any) => {
-    if (m && m.quote && !String(m.quote.text || '').trim()) {
-      const { quote, ...rest } = m;
-      return rest;
+  return list.map(sanitizeMoment);
+}
+
+// 相册 / 荣耀 / 寄语原来各自整数组存一个 KV 键，两个人同时保存时后写的会把先写的
+// 改动整段盖掉。改成一条一个键，各自只动自己那条。
+type SplitSpec = { name: string; legacyKey: string; prefix: string; idOf: (x: any) => string };
+
+const SPLIT: Record<'moments' | 'honors' | 'teacher', SplitSpec> = {
+  moments: { name: 'moments', legacyKey: 'moments', prefix: 'moment:', idOf: (x) => x?.slug },
+  honors: { name: 'honors', legacyKey: 'honors', prefix: 'honor:', idOf: (x) => x?.id },
+  teacher: { name: 'teacher', legacyKey: 'teacher', prefix: 'letter:', idOf: (x) => x?.id },
+};
+
+// split_v1:* 标记迁移已完成。有了它，就算之后条目被全部删空也不会再从旧数组键复活。
+// 旧键一律保留不删，出问题还能回滚。
+async function ensureSplit(kv: KVNamespace, spec: SplitSpec): Promise<void> {
+  const marker = `split_v1:${spec.name}`;
+  if (await kv.get(marker)) return;
+  const legacy = (await kv.get(spec.legacyKey, 'json')) as any[] | null;
+  if (Array.isArray(legacy)) {
+    for (let i = 0; i < legacy.length; i++) {
+      const id = spec.idOf(legacy[i]);
+      if (!id) continue;
+      await kv.put(`${spec.prefix}${id}`, JSON.stringify({ ...legacy[i], order: i }), { metadata: { order: i } });
     }
-    return m;
-  });
+  }
+  await kv.put(marker, String(Date.now()));
+}
+
+async function listSplit(kv: KVNamespace, spec: SplitSpec): Promise<any[]> {
+  await ensureSplit(kv, spec);
+  const found: { name: string; order: number }[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = (await kv.list({ prefix: spec.prefix, cursor })) as any;
+    for (const k of page.keys) found.push({ name: k.name, order: k.metadata?.order ?? 0 });
+    cursor = page.list_complete ? undefined : page.cursor;
+  } while (cursor);
+  found.sort((a, b) => a.order - b.order);
+  const items = await Promise.all(found.map((k) => kv.get(k.name, 'json')));
+  return items.filter(Boolean) as any[];
+}
+
+async function getSplitItem(kv: KVNamespace, spec: SplitSpec, id: string): Promise<any | null> {
+  await ensureSplit(kv, spec);
+  return (await kv.get(`${spec.prefix}${id}`, 'json')) as any | null;
+}
+
+async function putSplitItem(kv: KVNamespace, spec: SplitSpec, item: any, order?: number): Promise<string | null> {
+  const id = spec.idOf(item);
+  if (!id) return null;
+  const key = `${spec.prefix}${id}`;
+  let ord = order;
+  if (ord === undefined) {
+    const existing = (await kv.get(key, 'json')) as any;
+    // 新条目排到最后：时间戳一定大于迁移时写下的下标
+    ord = existing?.order ?? item.order ?? Date.now();
+  }
+  await kv.put(key, JSON.stringify({ ...item, order: ord }), { metadata: { order: ord } });
+  return id;
+}
+
+// 整表保存只做 upsert + 重排，绝不按提交上来的数组删键。
+// 删除必须走各自的 DELETE 路由，这样别人刚新增的条目不会被一次陈旧的整表保存抹掉。
+async function upsertSplitAll(kv: KVNamespace, spec: SplitSpec, list: any[]): Promise<void> {
+  await ensureSplit(kv, spec);
+  for (let i = 0; i < list.length; i++) {
+    await putSplitItem(kv, spec, list[i], i);
+  }
 }
 
 // 一封信一个 key（不是一个大数组），并发封存才不会互相覆盖。
@@ -208,24 +312,17 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       const genericError = '邮箱或密码错误';
       if (!stored) return json({ error: genericError }, 401);
 
-      // Support both old format (plain hash) and new format (JSON with role)
-      let storedHash: string;
-      let role = 'admin';
-      try {
-        const parsed = JSON.parse(stored);
-        storedHash = parsed.hash;
-        role = parsed.role || 'admin';
-      } catch {
-        storedHash = stored; // legacy: plain hash string
-      }
-
+      const account = parseAccount(stored);
+      const role = account.role || 'admin';
       const inputHash = await sha256(password);
-      if (inputHash !== storedHash) return json({ error: genericError }, 401);
+      if (inputHash !== account.hash) return json({ error: genericError }, 401);
       // Update login stats (async, don't block response)
-      const now = Date.now();
-      let loginCount = 1;
-      try { const u = JSON.parse(stored); loginCount = (u.loginCount || 0) + 1; } catch {}
-      env.CLASS09_CMS.put(`admin:${email}`, JSON.stringify({ ...JSON.parse(stored), hash: storedHash, role, loginCount, lastLogin: now })).catch(() => {});
+      env.CLASS09_CMS.put(`admin:${email}`, JSON.stringify({
+        ...account,
+        role,
+        loginCount: (account.loginCount || 0) + 1,
+        lastLogin: Date.now(),
+      })).catch(() => {});
       const token = await createToken(email, role, env.ADMIN_SECRET);
       await writeLog(env.CLASS09_CMS, 'login', email);
       return json({ token, email, role });
@@ -235,21 +332,24 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     if (path === 'register' && request.method === 'POST') {
       const { code, email, password } = await request.json() as any;
       if (!code || !email || !password) return json({ error: '邀请码、邮箱和密码均不能为空' }, 400);
-      const inviteRaw = await env.CLASS09_CMS.get(`invite:${code.toUpperCase()}`);
+      // 读写必须用同一个规范化后的 code，否则已用标记会写到另一个键上
+      const normCode = String(code).trim().toUpperCase();
+      const inviteRaw = await env.CLASS09_CMS.get(`invite:${normCode}`);
       if (!inviteRaw) return json({ error: '邀请码无效或已过期' }, 400);
       const invite = JSON.parse(inviteRaw);
+      if (invite.usedBy) return json({ error: '该邀请码已被使用，请向站长索取新的邀请码' }, 400);
       // Check if email already exists
       const existing = await env.CLASS09_CMS.get(`admin:${email}`);
       if (existing) return json({ error: '该邮箱已注册' }, 400);
       const hash = await sha256(password);
-      const userRecord = { hash, role: invite.role || 'editor', inviteCode: code, createdAt: Date.now(), loginCount: 0, lastLogin: null as number | null };
+      const userRecord = { hash, role: invite.role || 'editor', inviteCode: normCode, createdAt: Date.now(), loginCount: 0, lastLogin: null as number | null };
       await env.CLASS09_CMS.put(`admin:${email}`, JSON.stringify(userRecord));
       // Mark invite as used (keep for tracking, don't delete)
       invite.usedBy = email;
       invite.usedAt = Date.now();
-      await env.CLASS09_CMS.put(`invite:${code}`, JSON.stringify(invite), { expirationTtl: 7 * 24 * 3600 });
+      await env.CLASS09_CMS.put(`invite:${normCode}`, JSON.stringify(invite), { expirationTtl: 7 * 24 * 3600 });
       const token = await createToken(email, invite.role || 'editor', env.ADMIN_SECRET);
-      await writeLog(env.CLASS09_CMS, 'register', email, `via invite ${code} (${invite.role})`);
+      await writeLog(env.CLASS09_CMS, 'register', email, `via invite ${normCode} (${invite.role})`);
       return json({ ok: true, token, email, role: invite.role || 'editor' });
     }
 
@@ -288,47 +388,27 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     // Public read-only endpoints
     if (request.method === 'GET') {
       if (path === 'moments') {
-        const data = await env.CLASS09_CMS.get('moments', 'json') as any[] | null;
+        const data = await listSplit(env.CLASS09_CMS, SPLIT.moments);
         const showAll = url.searchParams.get('all') === '1';
-        if (showAll) {
-          const authHeader = request.headers.get('Authorization');
-          const tk = authHeader?.replace('Bearer ', '');
-          if (tk) {
-            const u = await verifyToken(tk, env.ADMIN_SECRET);
-            if (u) return json(data || []);
-          }
-        }
-        const published = (data || []).filter((m: any) => m.status !== 'draft');
+        if (showAll && await canSeeDrafts(request, env)) return json(data);
+        const published = data.filter((m: any) => m.status !== 'draft');
         return json(published);
       }
       if (path.startsWith('moments/') && !path.includes('/publish') && !path.includes('/unpublish')) {
         const slug = path.replace('moments/', '');
-        const data = await env.CLASS09_CMS.get('moments', 'json') as any[] | null;
-        const moment = (data || []).find((m: any) => m.slug === slug);
+        const moment = await getSplitItem(env.CLASS09_CMS, SPLIT.moments, slug);
         if (!moment) return json({ error: '未找到该时刻' }, 404);
         if (moment.status === 'draft') {
-          const authHeader = request.headers.get('Authorization');
-          const tk = authHeader?.replace('Bearer ', '');
-          if (tk) {
-            const u = await verifyToken(tk, env.ADMIN_SECRET);
-            if (u) return json(moment);
-          }
+          if (await canSeeDrafts(request, env)) return json(moment);
           return json({ error: '未找到该时刻' }, 404);
         }
         return json(moment);
       }
       if (path === 'honors') {
-        const data = await env.CLASS09_CMS.get('honors', 'json') as any[] | null;
+        const data = await listSplit(env.CLASS09_CMS, SPLIT.honors);
         const showAll = url.searchParams.get('all') === '1';
-        if (showAll) {
-          const authHeader = request.headers.get('Authorization');
-          const tk = authHeader?.replace('Bearer ', '');
-          if (tk) {
-            const u = await verifyToken(tk, env.ADMIN_SECRET);
-            if (u) return json(data || []);
-          }
-        }
-        const published = (data || []).filter((m: any) => m.status !== 'draft');
+        if (showAll && await canSeeDrafts(request, env)) return json(data);
+        const published = data.filter((m: any) => m.status !== 'draft');
         return json(published);
       }
       if (path === 'quotes') {
@@ -362,17 +442,10 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       }
       // GET /api/teacher — teacher letters (published only; ?all=1 + token for drafts)
       if (path === 'teacher') {
-        const data = await env.CLASS09_CMS.get('teacher', 'json') as any[] | null;
+        const data = await listSplit(env.CLASS09_CMS, SPLIT.teacher);
         const showAll = url.searchParams.get('all') === '1';
-        if (showAll) {
-          const authHeader = request.headers.get('Authorization');
-          const tk = authHeader?.replace('Bearer ', '');
-          if (tk) {
-            const u = await verifyToken(tk, env.ADMIN_SECRET);
-            if (u) return json(data || []);
-          }
-        }
-        const published = (data || []).filter((m: any) => m.status !== 'draft');
+        if (showAll && await canSeeDrafts(request, env)) return json(data);
+        const published = data.filter((m: any) => m.status !== 'draft');
         return json(published);
       }
       // GET /api/teacher_avatar — global teacher portrait URL (public)
@@ -387,12 +460,9 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       }
       // GET /api/logs — admin only
       if (path === 'logs') {
-        const authHeader = request.headers.get('Authorization');
-        const tk = authHeader?.replace('Bearer ', '');
-        if (!tk) return json({ error: '未登录' }, 401);
-        const u = await verifyToken(tk, env.ADMIN_SECRET);
-        if (!u) return json({ error: '登录已过期' }, 401);
-        if (u.role !== 'admin') return json({ error: '权限不足' }, 403);
+        const logAuth = await authenticate(request, env);
+        if ('error' in logAuth) return logAuth.error;
+        if (logAuth.user.role !== 'admin') return json({ error: '权限不足' }, 403);
         // KV list 按 UTF-8 升序返回，日志键是 log:<时间戳>，直接 limit:50 拿到的是最早 50 条。
         // 先游标列全量键名（不取值），取末尾 50 个再读值。
         const keys: string[] = [];
@@ -413,11 +483,9 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     }
 
     // All write routes require auth
-    const authHeader = request.headers.get('Authorization');
-    const token = authHeader?.replace('Bearer ', '');
-    if (!token) return json({ error: '未登录' }, 401);
-    const user = await verifyToken(token, env.ADMIN_SECRET);
-    if (!user) return json({ error: '登录已过期' }, 401);
+    const auth = await authenticate(request, env);
+    if ('error' in auth) return auth.error;
+    const user = auth.user;
 
     // 编辑与站长同权。站长专属仅限：操作日志、班主任头像、背景音乐、胶囊设置、邀请码。
 
@@ -466,7 +534,8 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
 
     if (path === 'moments' && request.method === 'PUT') {
       const body = await request.json();
-      await env.CLASS09_CMS.put('moments', JSON.stringify(sanitizeMoments(body)));
+      if (!Array.isArray(body)) return json({ error: 'moments 必须是数组' }, 400);
+      await upsertSplitAll(env.CLASS09_CMS, SPLIT.moments, sanitizeMoments(body));
       await writeLog(env.CLASS09_CMS, 'update_moments', user.email);
       return json({ ok: true });
     }
@@ -474,9 +543,9 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     // PUT /api/moments/:slug/publish — publish a draft
     if (path.startsWith('moments/') && path.endsWith('/publish') && request.method === 'PUT') {
       const slug = path.replace('moments/', '').replace('/publish', '');
-      const data = await env.CLASS09_CMS.get('moments', 'json') as any[] | null;
-      const updated = (data || []).map((m: any) => m.slug === slug ? { ...m, status: 'published' } : m);
-      await env.CLASS09_CMS.put('moments', JSON.stringify(updated));
+      const moment = await getSplitItem(env.CLASS09_CMS, SPLIT.moments, slug);
+      if (!moment) return json({ error: '未找到该时刻' }, 404);
+      await putSplitItem(env.CLASS09_CMS, SPLIT.moments, { ...moment, status: 'published' });
       await writeLog(env.CLASS09_CMS, 'publish_moment', user.email, slug);
       return json({ ok: true });
     }
@@ -484,17 +553,58 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     // PUT /api/moments/:slug/unpublish — set back to draft
     if (path.startsWith('moments/') && path.endsWith('/unpublish') && request.method === 'PUT') {
       const slug = path.replace('moments/', '').replace('/unpublish', '');
-      const data = await env.CLASS09_CMS.get('moments', 'json') as any[] | null;
-      const updated = (data || []).map((m: any) => m.slug === slug ? { ...m, status: 'draft' } : m);
-      await env.CLASS09_CMS.put('moments', JSON.stringify(updated));
+      const moment = await getSplitItem(env.CLASS09_CMS, SPLIT.moments, slug);
+      if (!moment) return json({ error: '未找到该时刻' }, 404);
+      await putSplitItem(env.CLASS09_CMS, SPLIT.moments, { ...moment, status: 'draft' });
       await writeLog(env.CLASS09_CMS, 'unpublish_moment', user.email, slug);
+      return json({ ok: true });
+    }
+
+    // PUT /api/moments/:slug — 只落库这一条，别人同时改别的时刻不会被覆盖
+    if (path.startsWith('moments/') && request.method === 'PUT') {
+      const slug = path.replace('moments/', '');
+      const body = (await request.json()) as any;
+      if (!body || body.slug !== slug) return json({ error: 'slug 与路径不一致' }, 400);
+      await ensureSplit(env.CLASS09_CMS, SPLIT.moments);
+      await putSplitItem(env.CLASS09_CMS, SPLIT.moments, sanitizeMoment(body));
+      await writeLog(env.CLASS09_CMS, 'update_moment', user.email, slug);
+      return json({ ok: true });
+    }
+
+    // DELETE /api/moments/:slug — 删除必须单独调用，整表保存不再按提交的数组删键
+    if (path.startsWith('moments/') && request.method === 'DELETE') {
+      const slug = path.replace('moments/', '');
+      await ensureSplit(env.CLASS09_CMS, SPLIT.moments);
+      await env.CLASS09_CMS.delete(`${SPLIT.moments.prefix}${slug}`);
+      await writeLog(env.CLASS09_CMS, 'delete_moment', user.email, slug);
       return json({ ok: true });
     }
 
     if (path === 'honors' && request.method === 'PUT') {
       const body = await request.json();
-      await env.CLASS09_CMS.put('honors', JSON.stringify(body));
+      if (!Array.isArray(body)) return json({ error: 'honors 必须是数组' }, 400);
+      await upsertSplitAll(env.CLASS09_CMS, SPLIT.honors, body);
       await writeLog(env.CLASS09_CMS, 'update_honors', user.email);
+      return json({ ok: true });
+    }
+
+    // PUT /api/honors/:id — 单条落库
+    if (path.startsWith('honors/') && request.method === 'PUT') {
+      const id = path.replace('honors/', '');
+      const body = (await request.json()) as any;
+      if (!body || body.id !== id) return json({ error: 'id 与路径不一致' }, 400);
+      await ensureSplit(env.CLASS09_CMS, SPLIT.honors);
+      await putSplitItem(env.CLASS09_CMS, SPLIT.honors, body);
+      await writeLog(env.CLASS09_CMS, 'update_honor', user.email, id);
+      return json({ ok: true });
+    }
+
+    // DELETE /api/honors/:id
+    if (path.startsWith('honors/') && request.method === 'DELETE') {
+      const id = path.replace('honors/', '');
+      await ensureSplit(env.CLASS09_CMS, SPLIT.honors);
+      await env.CLASS09_CMS.delete(`${SPLIT.honors.prefix}${id}`);
+      await writeLog(env.CLASS09_CMS, 'delete_honor', user.email, id);
       return json({ ok: true });
     }
 
@@ -505,11 +615,32 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       return json({ ok: true });
     }
 
-    // PUT /api/teacher — overwrite teacher letters array
+    // PUT /api/teacher — upsert 全部寄语（不按提交数组删键）
     if (path === 'teacher' && request.method === 'PUT') {
       const body = await request.json();
-      await env.CLASS09_CMS.put('teacher', JSON.stringify(body));
+      if (!Array.isArray(body)) return json({ error: 'teacher 必须是数组' }, 400);
+      await upsertSplitAll(env.CLASS09_CMS, SPLIT.teacher, body);
       await writeLog(env.CLASS09_CMS, 'update_teacher', user.email);
+      return json({ ok: true });
+    }
+
+    // PUT /api/teacher/:id — 单条落库
+    if (path.startsWith('teacher/') && request.method === 'PUT') {
+      const id = path.replace('teacher/', '');
+      const body = (await request.json()) as any;
+      if (!body || body.id !== id) return json({ error: 'id 与路径不一致' }, 400);
+      await ensureSplit(env.CLASS09_CMS, SPLIT.teacher);
+      await putSplitItem(env.CLASS09_CMS, SPLIT.teacher, body);
+      await writeLog(env.CLASS09_CMS, 'update_letter', user.email, id);
+      return json({ ok: true });
+    }
+
+    // DELETE /api/teacher/:id
+    if (path.startsWith('teacher/') && request.method === 'DELETE') {
+      const id = path.replace('teacher/', '');
+      await ensureSplit(env.CLASS09_CMS, SPLIT.teacher);
+      await env.CLASS09_CMS.delete(`${SPLIT.teacher.prefix}${id}`);
+      await writeLog(env.CLASS09_CMS, 'delete_letter', user.email, id);
       return json({ ok: true });
     }
 
@@ -579,9 +710,92 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     // DELETE /api/invite/:code — admin revokes an invite
     if (path.startsWith('invite/') && request.method === 'DELETE') {
       if (user.role !== 'admin') return json({ error: '仅站长可撤销邀请码' }, 403);
-      const code = path.replace('invite/', '');
+      const code = decodeURIComponent(path.replace('invite/', '')).trim().toUpperCase();
+      const raw = await env.CLASS09_CMS.get(`invite:${code}`);
+      const usedBy = raw ? (JSON.parse(raw).usedBy || '') : '';
       await env.CLASS09_CMS.delete(`invite:${code}`);
       await writeLog(env.CLASS09_CMS, 'revoke_invite', user.email, code);
+      // 删邀请码不影响已经注册出来的账号，要收回权限得去「账号」页删号
+      return json({ ok: true, usedBy });
+    }
+
+    // --- 账号管理（站长专属）---
+
+    // GET /api/accounts — list all accounts (never returns password hashes)
+    if (path === 'accounts' && request.method === 'GET') {
+      if (user.role !== 'admin') return json({ error: '权限不足' }, 403);
+      const keys: string[] = [];
+      let cursor: string | undefined;
+      do {
+        const page = await env.CLASS09_CMS.list({ prefix: 'admin:', cursor }) as any;
+        for (const k of page.keys) keys.push(k.name);
+        cursor = page.list_complete ? undefined : page.cursor;
+      } while (cursor);
+      const accounts = [];
+      for (const name of keys) {
+        const raw = await env.CLASS09_CMS.get(name);
+        if (!raw) continue;
+        const a = parseAccount(raw);
+        accounts.push({
+          email: name.replace('admin:', ''),
+          role: a.role || 'admin',
+          loginCount: a.loginCount || 0,
+          lastLogin: a.lastLogin || null,
+          createdAt: a.createdAt || null,
+          inviteCode: a.inviteCode || '',
+          isSelf: name.replace('admin:', '') === user.email,
+        });
+      }
+      accounts.sort((x, y) => (y.lastLogin || 0) - (x.lastLogin || 0));
+      return json(accounts);
+    }
+
+    // PUT /api/accounts/:email — change role
+    if (path.startsWith('accounts/') && request.method === 'PUT') {
+      if (user.role !== 'admin') return json({ error: '仅站长可修改账号' }, 403);
+      const email = decodeURIComponent(path.replace('accounts/', ''));
+      const { role: newRole } = await request.json() as any;
+      if (!['admin', 'editor'].includes(newRole)) return json({ error: '角色只能是 admin 或 editor' }, 400);
+      // 禁止改自己 → 能被改的站长必然不是唯一的，不会把站长清空
+      if (email === user.email) return json({ error: '不能修改自己的角色' }, 400);
+      const raw = await env.CLASS09_CMS.get(`admin:${email}`);
+      if (!raw) return json({ error: '账号不存在' }, 404);
+      const a = parseAccount(raw);
+      await env.CLASS09_CMS.put(`admin:${email}`, JSON.stringify({ ...a, role: newRole }));
+      await writeLog(env.CLASS09_CMS, 'update_account_role', user.email, `${email} → ${newRole}`);
+      return json({ ok: true });
+    }
+
+    // DELETE /api/accounts/:email — remove an account (revokes its sessions too)
+    if (path.startsWith('accounts/') && request.method === 'DELETE') {
+      if (user.role !== 'admin') return json({ error: '仅站长可删除账号' }, 403);
+      const email = decodeURIComponent(path.replace('accounts/', ''));
+      if (email === user.email) return json({ error: '不能删除自己的账号' }, 400);
+      const raw = await env.CLASS09_CMS.get(`admin:${email}`);
+      if (!raw) return json({ error: '账号不存在' }, 404);
+      const a = parseAccount(raw);
+      const { hash, ...meta } = a;
+      // 留档但不进共享回收站：GET /api/trash 对编辑也开放，会泄露其他人的邮箱
+      await env.CLASS09_CMS.put(`removed_account:${Date.now()}`, JSON.stringify({
+        email, ...meta, deleted_by: user.email, deleted_at: Date.now(),
+      }));
+      await env.CLASS09_CMS.delete(`admin:${email}`);
+      await writeLog(env.CLASS09_CMS, 'delete_account', user.email, email);
+      return json({ ok: true });
+    }
+
+    // POST /api/password — 自助改密，改完所有旧 token 立即失效
+    if (path === 'password' && request.method === 'POST') {
+      const { oldPassword, newPassword } = await request.json() as any;
+      if (!oldPassword || !newPassword) return json({ error: '请填写原密码和新密码' }, 400);
+      if (String(newPassword).length < 8) return json({ error: '新密码至少 8 位' }, 400);
+      if (await sha256(oldPassword) !== user.account.hash) return json({ error: '原密码不正确' }, 400);
+      await env.CLASS09_CMS.put(`admin:${user.email}`, JSON.stringify({
+        ...user.account,
+        hash: await sha256(newPassword),
+        pwChangedAt: Date.now(),
+      }));
+      await writeLog(env.CLASS09_CMS, 'change_password', user.email);
       return json({ ok: true });
     }
 
@@ -623,26 +837,21 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
 
       // Restore based on type
       if (item.type === 'moment_photo') {
-        const moments = await env.CLASS09_CMS.get('moments', 'json') as any[] || [];
-        const m = moments.find((x: any) => x.slug === item.slug);
-        if (m) {
-          m.photos = m.photos || [];
-          m.photos.push(item.data);
-          m.count = m.photos.length;
-          await env.CLASS09_CMS.put('moments', JSON.stringify(moments));
-        }
+        const m = await getSplitItem(env.CLASS09_CMS, SPLIT.moments, item.slug);
+        if (!m) return json({ error: '原时刻已不存在，无法恢复照片' }, 400);
+        m.photos = m.photos || [];
+        m.photos.push(item.data);
+        m.count = m.photos.length;
+        await putSplitItem(env.CLASS09_CMS, SPLIT.moments, m);
       } else if (item.type === 'moment') {
-        const moments = await env.CLASS09_CMS.get('moments', 'json') as any[] || [];
-        moments.push(item.data);
-        await env.CLASS09_CMS.put('moments', JSON.stringify(moments));
+        await ensureSplit(env.CLASS09_CMS, SPLIT.moments);
+        await putSplitItem(env.CLASS09_CMS, SPLIT.moments, item.data);
       } else if (item.type === 'honor') {
-        const honors = await env.CLASS09_CMS.get('honors', 'json') as any[] || [];
-        honors.push(item.data);
-        await env.CLASS09_CMS.put('honors', JSON.stringify(honors));
+        await ensureSplit(env.CLASS09_CMS, SPLIT.honors);
+        await putSplitItem(env.CLASS09_CMS, SPLIT.honors, item.data);
       } else if (item.type === 'teacher_letter') {
-        const letters = await env.CLASS09_CMS.get('teacher', 'json') as any[] || [];
-        letters.push(item.data);
-        await env.CLASS09_CMS.put('teacher', JSON.stringify(letters));
+        await ensureSplit(env.CLASS09_CMS, SPLIT.teacher);
+        await putSplitItem(env.CLASS09_CMS, SPLIT.teacher, item.data);
       } else {
         // Unknown type — do NOT delete the trash record, so data is never lost silently
         return json({ error: `暂不支持恢复该类型（${item.type}），记录已保留` }, 400);

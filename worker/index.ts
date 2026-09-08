@@ -68,6 +68,19 @@ async function writeLog(kv: KVNamespace, action: string, email: string, detail?:
   await kv.put(key, JSON.stringify(entry), { expirationTtl: 90 * 24 * 3600 }); // keep 90 days
 }
 
+// 时光胶囊：孩子姓名 + 8 位生日 = 这封信属于谁。生日只做归属标识，不当凭证用，
+// 所以查询接口永远只回元信息、不回正文。
+function isValidBirthday(v: string): boolean {
+  if (!/^\d{8}$/.test(v)) return false;
+  const y = +v.slice(0, 4), m = +v.slice(4, 6), d = +v.slice(6, 8);
+  const now = new Date().getFullYear();
+  return y >= 2010 && y <= now && m >= 1 && m <= 12 && d >= 1 && d <= 31;
+}
+
+function matchKeyOf(child: string, birthday: string): string {
+  return `${child.replace(/\s+/g, '').toLowerCase()}|${birthday}`;
+}
+
 // --- Main handler ---
 
 export default {
@@ -213,20 +226,28 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
 
     // POST /api/capsule (public — anyone can seal a letter; contents are NEVER readable until open date)
     if (path === 'capsule' && request.method === 'POST') {
-      const { author, text } = await request.json() as any;
+      const { author, text, child, birthday } = await request.json() as any;
+      const childName = (child || '').toString().trim().slice(0, 20);
+      if (!childName) return json({ error: '请填写孩子姓名' }, 400);
+      const bd = (birthday || '').toString().trim();
+      if (!isValidBirthday(bd)) return json({ error: '生日请填 8 位数字，如 20180315' }, 400);
       if (!text || !text.trim()) return json({ error: '信的内容不能为空' }, 400);
       if (text.length > 5000) return json({ error: '信件内容过长（上限 5000 字）' }, 400);
       const list = await env.CLASS09_CMS.get('capsule_letters', 'json') as any[] | null;
       const letters = list || [];
       letters.push({
         id: `letter-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        child: childName,
+        birthday: bd,
+        matchKey: matchKeyOf(childName, bd),
         author: (author || '匿名').toString().slice(0, 40),
         text: text.toString(),
         createdAt: Date.now(),
       });
       await env.CLASS09_CMS.put('capsule_letters', JSON.stringify(letters));
-      await writeLog(env.CLASS09_CMS, 'seal_letter', author || '匿名', `第 ${letters.length} 封`);
-      return json({ ok: true, count: letters.length });
+      await writeLog(env.CLASS09_CMS, 'seal_letter', author || '匿名', `${childName} · 全班第 ${letters.length} 封`);
+      const mine = letters.filter((l: any) => l.matchKey === matchKeyOf(childName, bd)).length;
+      return json({ ok: true, count: letters.length, child: childName, mine });
     }
 
     // Public read-only endpoints
@@ -288,6 +309,25 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
           openDate: meta?.openDate || '2031-06-30',
           title: meta?.title || '写给 2031 年毕业的我',
           intro: meta?.intro || '每个小朋友都写下一封信，装进这枚时光胶囊。它会一直沉睡，直到 2031 年夏天毕业那天，才被一封封开启。',
+        });
+      }
+      // GET /api/capsule/lookup?child=&birthday= — 家长自查：只回元信息，绝不回正文
+      if (path === 'capsule/lookup') {
+        const childName = (url.searchParams.get('child') || '').trim().slice(0, 20);
+        const bd = (url.searchParams.get('birthday') || '').trim();
+        if (!childName) return json({ error: '请填写孩子姓名' }, 400);
+        if (!isValidBirthday(bd)) return json({ error: '生日请填 8 位数字，如 20180315' }, 400);
+        const list = await env.CLASS09_CMS.get('capsule_letters', 'json') as any[] | null;
+        const key = matchKeyOf(childName, bd);
+        const mine = (list || []).filter((l: any) => l.matchKey === key);
+        return json({
+          child: childName,
+          count: mine.length,
+          letters: mine.map((l: any) => ({
+            sealedAt: l.createdAt,
+            chars: (l.text || '').length,
+            author: l.author || '匿名',
+          })),
         });
       }
       // GET /api/teacher — teacher letters (published only; ?all=1 + token for drafts)

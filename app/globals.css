@@ -1160,6 +1160,23 @@ button { font-family: inherit; }
 .capsule-done h3 { font-size: 20px; letter-spacing: 3px; margin: 0 0 12px; }
 .capsule-done p { font-size: 13px; line-height: 2; color: var(--ink-soft); letter-spacing: 1px; margin: 0 0 22px; }
 .capsule-again { background: none; border: 1px solid var(--warm-red); color: var(--warm-red); padding: 9px 20px; font-size: 12px; letter-spacing: 2px; cursor: pointer; }
+.capsule-done-tip { font-size: 12px !important; color: var(--ink-soft); }
+
+.capsule-switch { display: flex; gap: 0; margin-top: 24px; border-bottom: 1px solid rgba(61,47,33,0.15); }
+.capsule-switch button {
+  background: none; border: none; border-bottom: 2px solid transparent;
+  padding: 10px 18px; font-size: 12.5px; letter-spacing: 2px;
+  color: var(--ink-soft); cursor: pointer; font-family: inherit;
+}
+.capsule-switch button.active { color: var(--warm-red); border-bottom-color: var(--warm-red); }
+
+.capsule-lookup-result {
+  margin-top: 20px; padding: 16px 18px;
+  background: var(--paper-2); border-left: 3px solid var(--sage-deep);
+  font-size: 13px; line-height: 1.9; letter-spacing: 1px; color: var(--ink);
+}
+.capsule-lookup-result p { margin: 0 0 8px; }
+.capsule-lookup-result ul { margin: 0; padding-left: 18px; color: var(--ink-soft); }
 
 /* ============================================================
    班主任寄语 · From Teacher

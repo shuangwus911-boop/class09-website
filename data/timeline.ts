@@ -36,6 +36,14 @@ export function academicStartYear(now: Date): number {
   return now.getMonth() >= 8 ? now.getFullYear() : now.getFullYear() - 1;
 }
 
+const ORDINALS = ['一', '二', '三', '四', '五', '六'];
+
+// 照片的学期名形如「2026 秋 · 二上」，从里面认出年级；认不出返回 null
+export function gradeKeyOfSemester(semester: string): string | null {
+  const hit = semester.match(/([一二三四五六])[上下]/);
+  return hit ? `g${ORDINALS.indexOf(hit[1]) + 1}` : null;
+}
+
 export function resolveTimeline(now: Date): TimelineNode[] {
   const current = academicStartYear(now);
   return GRADES.map(g => {

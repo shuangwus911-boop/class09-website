@@ -1,12 +1,19 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import Nav from '@/components/layout/Nav';
 import Footer from '@/components/layout/Footer';
-import { resolveTimeline } from '@/data/timeline';
-import { MOMENTS } from '@/data/moments';
+import { resolveTimeline, gradeKeyOfSemester } from '@/data/timeline';
+import { MOMENTS as FALLBACK_MOMENTS } from '@/data/moments';
+import type { Moment } from '@/data/moments';
 
 export default function Page() {
   const timeline = resolveTimeline(new Date());
+  const [moments, setMoments] = useState<Moment[]>(FALLBACK_MOMENTS);
+
+  useEffect(() => {
+    fetch('/api/moments').then(r => r.ok ? r.json() : null).then(d => { if (Array.isArray(d) && d.length) setMoments(d); }).catch(() => {});
+  }, []);
 
   return (
     <>
@@ -18,12 +25,9 @@ export default function Page() {
       <div className="sec-note">从一年级到毕业 · 每一步都是故事</div>
 
       <div className="tl-vertical">
-        {timeline.map((node, idx) => {
-          // Find moments belonging to this grade year
-          const yearMoments = node.key === 'g1'
-            ? MOMENTS.filter((m) => m.semester.includes('一'))
-            : [];
-          
+        {timeline.map((node) => {
+          const yearMoments = moments.filter(m => gradeKeyOfSemester(m.semester) === node.key);
+
           return (
             <div key={node.key} className={`tl-v-item tl-v-item--${node.status}`}>
               <div className="tl-v-dot" />

@@ -341,6 +341,8 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     const user = await verifyToken(token, env.ADMIN_SECRET);
     if (!user) return json({ error: '登录已过期' }, 401);
 
+    // 编辑与站长同权。站长专属仅限：操作日志、班主任头像、背景音乐、胶囊设置、邀请码。
+
     // POST /api/upload — upload image to R2
     if (path === 'upload' && request.method === 'POST') {
       if (!env.IMAGES) return json({ error: 'R2 存储桶未配置' }, 503);
@@ -375,9 +377,8 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       return json({ ok: true, url: imageUrl, key });
     }
 
-    // DELETE /api/images/:key — delete image from R2 (admin only)
+    // DELETE /api/images/:key — delete image from R2
     if (path.startsWith('images/') && request.method === 'DELETE') {
-      if (user.role !== 'admin') return json({ error: '仅站长可删除图片' }, 403);
       if (!env.IMAGES) return json({ error: 'R2 存储桶未配置' }, 503);
       const key = path.replace('images/', '');
       await env.IMAGES.delete(key);
@@ -386,16 +387,14 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     }
 
     if (path === 'moments' && request.method === 'PUT') {
-      if (user.role !== 'admin') return json({ error: '仅站长可覆写数据集' }, 403);
       const body = await request.json();
       await env.CLASS09_CMS.put('moments', JSON.stringify(body));
       await writeLog(env.CLASS09_CMS, 'update_moments', user.email);
       return json({ ok: true });
     }
 
-    // PUT /api/moments/:slug/publish — admin publishes a draft
+    // PUT /api/moments/:slug/publish — publish a draft
     if (path.startsWith('moments/') && path.endsWith('/publish') && request.method === 'PUT') {
-      if (user.role !== 'admin') return json({ error: '仅站长可发布内容' }, 403);
       const slug = path.replace('moments/', '').replace('/publish', '');
       const data = await env.CLASS09_CMS.get('moments', 'json') as any[] | null;
       const updated = (data || []).map((m: any) => m.slug === slug ? { ...m, status: 'published' } : m);
@@ -404,9 +403,8 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       return json({ ok: true });
     }
 
-    // PUT /api/moments/:slug/unpublish — admin sets back to draft
+    // PUT /api/moments/:slug/unpublish — set back to draft
     if (path.startsWith('moments/') && path.endsWith('/unpublish') && request.method === 'PUT') {
-      if (user.role !== 'admin') return json({ error: '仅站长可下架内容' }, 403);
       const slug = path.replace('moments/', '').replace('/unpublish', '');
       const data = await env.CLASS09_CMS.get('moments', 'json') as any[] | null;
       const updated = (data || []).map((m: any) => m.slug === slug ? { ...m, status: 'draft' } : m);
@@ -416,7 +414,6 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     }
 
     if (path === 'honors' && request.method === 'PUT') {
-      if (user.role !== 'admin') return json({ error: '仅站长可覆写数据集' }, 403);
       const body = await request.json();
       await env.CLASS09_CMS.put('honors', JSON.stringify(body));
       await writeLog(env.CLASS09_CMS, 'update_honors', user.email);
@@ -424,7 +421,6 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     }
 
     if (path === 'quotes' && request.method === 'PUT') {
-      if (user.role !== 'admin') return json({ error: '仅站长可覆写数据集' }, 403);
       const body = await request.json();
       await env.CLASS09_CMS.put('quotes', JSON.stringify(body));
       await writeLog(env.CLASS09_CMS, 'update_quotes', user.email);
@@ -433,7 +429,6 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
 
     // PUT /api/teacher — overwrite teacher letters array
     if (path === 'teacher' && request.method === 'PUT') {
-      if (user.role !== 'admin') return json({ error: '仅站长可覆写数据集' }, 403);
       const body = await request.json();
       await env.CLASS09_CMS.put('teacher', JSON.stringify(body));
       await writeLog(env.CLASS09_CMS, 'update_teacher', user.email);
@@ -582,7 +577,6 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
 
     // DELETE /api/trash/:id — permanently delete a trashed item
     if (path.startsWith('trash/') && request.method === 'DELETE') {
-      if (user.role !== 'admin') return json({ error: '仅站长可彻底删除' }, 403);
       const id = path.replace('trash/', '');
       const key = `trash:${id}`;
       const item = await env.CLASS09_CMS.get(key, 'json') as any;

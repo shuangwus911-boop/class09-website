@@ -186,11 +186,10 @@ function AdminLogin({ onLogin }: { onLogin: (token: string, role: string) => voi
 }
 
 // --- Moment Card with status ---
-function MomentCard({ moment, onChange, onRemove, role, onPublish, onUnpublish, onUploadPhoto, onDeletePhoto }: {
+function MomentCard({ moment, onChange, onRemove, onPublish, onUnpublish, onUploadPhoto, onDeletePhoto }: {
   moment: Moment;
   onChange: (m: Moment) => void;
   onRemove: () => void;
-  role: string;
   onPublish: () => void;
   onUnpublish: () => void;
   onUploadPhoto: (file: File) => void;
@@ -221,8 +220,8 @@ function MomentCard({ moment, onChange, onRemove, role, onPublish, onUnpublish, 
           {!isDraft && <span style={{ fontSize: 10, color: 'var(--sage-deep)', letterSpacing: 1 }}>已发布</span>}
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
-          {role === 'admin' && isDraft && <button className="admin-btn-icon" onClick={onPublish} title="发布" style={{ color: 'var(--sage-deep)', borderColor: 'var(--sage-deep)' }}>✓</button>}
-          {role === 'admin' && !isDraft && <button className="admin-btn-icon" onClick={onUnpublish} title="下架" style={{ color: 'var(--warm-orange)', borderColor: 'var(--warm-orange)' }}>↓</button>}
+          {isDraft && <button className="admin-btn-icon" onClick={onPublish} title="发布" style={{ color: 'var(--sage-deep)', borderColor: 'var(--sage-deep)' }}>✓</button>}
+          {!isDraft && <button className="admin-btn-icon" onClick={onUnpublish} title="下架" style={{ color: 'var(--warm-orange)', borderColor: 'var(--warm-orange)' }}>↓</button>}
           <button className="admin-btn-icon" onClick={onRemove} title="删除此条">×</button>
         </div>
       </div>
@@ -286,7 +285,7 @@ function MomentCard({ moment, onChange, onRemove, role, onPublish, onUnpublish, 
 }
 
 // --- Moment Editor ---
-function MomentEditor({ token, role, authFetch }: { token: string; role: string; authFetch: any }) {
+function MomentEditor({ token, authFetch }: { token: string; authFetch: any }) {
   const [moments, setMoments] = useState<Moment[]>([]);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
@@ -409,11 +408,10 @@ function MomentEditor({ token, role, authFetch }: { token: string; role: string;
         <button className="admin-btn-add" onClick={add}>+ 添加时刻</button>
       </div>
       {loadError && <p className="admin-hint" style={{ color: 'var(--warm-orange)', fontWeight: 600 }}>⚠ 数据加载失败，为保护线上内容已禁用保存。请刷新页面重试。</p>}
-      {role !== 'admin' && <p className="admin-hint">你是「编辑」身份，可查看与整理，但保存需站长操作。</p>}
-      {drafts.length > 0 && <p className="admin-hint">橙色边框 = 草稿，需站长发布后前台才可见</p>}
+      {drafts.length > 0 && <p className="admin-hint">橙色边框 = 草稿，发布后前台才可见</p>}
       <div className="admin-card-list">
         {moments.map((m, i) => (
-          <MomentCard key={m.slug} moment={m} role={role}
+          <MomentCard key={m.slug} moment={m}
             onChange={upd => { const n = [...moments]; n[i] = upd; setMoments(n); }}
             onRemove={async () => { if (confirm('删除「' + (m.title || '未命名') + '」？')) { await trashToKV(authFetch, 'moment', m, m.title, m.slug); setMoments(moments.filter((_, j) => j !== i)); } }}
             onPublish={() => publish(m.slug)}
@@ -425,7 +423,7 @@ function MomentEditor({ token, role, authFetch }: { token: string; role: string;
         {moments.length === 0 && <p className="admin-empty">{loaded ? '暂无数据，点击上方按钮添加第一个时刻' : (loadError ? '' : '加载中…')}</p>}
       </div>
       <div className="admin-actions">
-        <button className="admin-btn-save" onClick={save} disabled={saving || !loaded || role !== 'admin'}>{saving ? '保存中...' : '保存所有更改'}</button>
+        <button className="admin-btn-save" onClick={save} disabled={saving || !loaded}>{saving ? '保存中...' : '保存所有更改'}</button>
         {msg && <span className="admin-msg">{msg}</span>}
       </div>
     </div>
@@ -610,8 +608,8 @@ function InviteManager({ authFetch }: { authFetch: any }) {
         <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
           <span style={{ fontSize: 10, color: 'var(--ink-soft)', letterSpacing: 1 }}>角色</span>
           <select value={role} onChange={e => setRole(e.target.value)} style={{ padding: '7px 10px', border: '1px solid rgba(61,47,33,0.2)', background: 'var(--cream)', fontSize: 13, fontFamily: 'inherit' }}>
-            <option value="editor">编辑 (可上传内容)</option>
-            <option value="admin">站长 (可审核发布)</option>
+            <option value="editor">编辑 (可编辑发布全部内容)</option>
+            <option value="admin">站长 (额外可管头像/音乐/胶囊/邀请码/日志)</option>
           </select>
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
@@ -799,10 +797,9 @@ function TeacherEditor({ token, role, authFetch }: { token: string; role: string
       </div>
       <p className="admin-hint">每个学年一封，班主任写给孩子们的话。勾选「首页展示」的那封会出现在首页预览。</p>
       {loadError && <p className="admin-hint" style={{ color: 'var(--warm-orange)', fontWeight: 600 }}>⚠ 数据加载失败，为保护线上内容已禁用保存。请刷新页面重试。</p>}
-      {role !== 'admin' && <p className="admin-hint">你是「编辑」身份，可查看与整理，但保存需站长操作。</p>}
 
-      {/* Global avatar block */}
-      <div className="admin-card" style={{ marginBottom: 18, padding: 18 }}>
+      {/* Global avatar block —— 站长专属 */}
+      {role === 'admin' && <div className="admin-card" style={{ marginBottom: 18, padding: 18 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap' }}>
           <div style={{
             width: 84, height: 84, borderRadius: '50%', overflow: 'hidden',
@@ -855,7 +852,7 @@ function TeacherEditor({ token, role, authFetch }: { token: string; role: string
             </div>
           </div>
         </div>
-      </div>
+      </div>}
 
       <div className="admin-card-list">
         {letters.map((l, i) => {
@@ -869,7 +866,7 @@ function TeacherEditor({ token, role, authFetch }: { token: string; role: string
                   {!isDraft && <span style={{ fontSize: 10, color: 'var(--sage-deep)', letterSpacing: 1 }}>已发布</span>}
                 </div>
                 <div style={{ display: 'flex', gap: 6 }}>
-                  {role === 'admin' && <button className="admin-btn-icon" onClick={() => upd(i, 'status', isDraft ? 'published' : 'draft')} title={isDraft ? '发布' : '下架'} style={{ color: isDraft ? 'var(--sage-deep)' : 'var(--warm-orange)', borderColor: isDraft ? 'var(--sage-deep)' : 'var(--warm-orange)' }}>{isDraft ? '✓' : '↓'}</button>}
+                  <button className="admin-btn-icon" onClick={() => upd(i, 'status', isDraft ? 'published' : 'draft')} title={isDraft ? '发布' : '下架'} style={{ color: isDraft ? 'var(--sage-deep)' : 'var(--warm-orange)', borderColor: isDraft ? 'var(--sage-deep)' : 'var(--warm-orange)' }}>{isDraft ? '✓' : '↓'}</button>
                   <button className="admin-btn-icon" onClick={async () => { if (confirm('删除这封寄语？')) { await trashToKV(authFetch, 'teacher_letter', l, l.title || l.yearLabel); setLetters(letters.filter((_, j) => j !== i)); } }} title="删除此条">×</button>
                 </div>
               </div>
@@ -889,7 +886,7 @@ function TeacherEditor({ token, role, authFetch }: { token: string; role: string
         {letters.length === 0 && <p className="admin-empty">{loaded ? '暂无寄语，点击上方按钮添加第一封' : (loadError ? '' : '加载中…')}</p>}
       </div>
       <div className="admin-actions">
-        <button className="admin-btn-save" onClick={save} disabled={saving || !loaded || role !== 'admin'}>{saving ? '保存中...' : '保存所有更改'}</button>
+        <button className="admin-btn-save" onClick={save} disabled={saving || !loaded}>{saving ? '保存中...' : '保存所有更改'}</button>
         {msg && <span className="admin-msg">{msg}</span>}
       </div>
     </div>
@@ -1067,7 +1064,7 @@ function TrashViewer({ token, authFetch }: { token: string; authFetch: any }) {
         <h3>回收站 <span className="admin-count">{items.length}</span></h3>
         <button className="admin-btn-add" onClick={load} disabled={loading}>{loading ? '刷新中...' : '刷新'}</button>
       </div>
-      <p className="admin-hint">所有编辑删除的内容都会先进入回收站，站长可以在这里恢复或彻底删除。恢复后会回到原来的位置。</p>
+      <p className="admin-hint">删除的内容都会先进入回收站，可以在这里恢复或彻底删除。恢复后会回到原来的位置。彻底删除不可撤销。</p>
       {items.length === 0 && <p className="admin-empty">回收站为空</p>}
       <div className="admin-card-list">
         {items.map(item => (
@@ -1132,17 +1129,17 @@ export default function AdminPage() {
         <button className={tab === 'moments' ? 'active' : ''} onClick={() => setTab('moments')}>时光相册</button>
         <button className={tab === 'honors' ? 'active' : ''} onClick={() => setTab('honors')}>荣耀墙</button>
         <button className={tab === 'teacher' ? 'active' : ''} onClick={() => setTab('teacher')}>班主任寄语</button>
-        <button className={tab === 'capsule' ? 'active' : ''} onClick={() => setTab('capsule')}>时光胶囊</button>
-        <button className={tab === 'music' ? 'active' : ''} onClick={() => setTab('music')}>班级之声</button>
+        {role === 'admin' && <button className={tab === 'capsule' ? 'active' : ''} onClick={() => setTab('capsule')}>时光胶囊</button>}
+        {role === 'admin' && <button className={tab === 'music' ? 'active' : ''} onClick={() => setTab('music')}>班级之声</button>}
         <button className={tab === 'trash' ? 'active' : ''} onClick={() => setTab('trash')}>回收站</button>
         {role === 'admin' && <button className={tab === 'logs' ? 'active' : ''} onClick={() => setTab('logs')}>操作日志</button>}
         {role === 'admin' && <button className={tab === 'accounts' ? 'active' : ''} onClick={() => setTab('accounts')}>邀请码</button>}
       </div>
-      {tab === 'moments' && <MomentEditor token={token} role={role} authFetch={authFetch} />}
+      {tab === 'moments' && <MomentEditor token={token} authFetch={authFetch} />}
       {tab === 'honors' && <HonorEditor token={token} authFetch={authFetch} />}
       {tab === 'teacher' && <TeacherEditor token={token} role={role} authFetch={authFetch} />}
-      {tab === 'capsule' && <CapsuleSettings authFetch={authFetch} />}
-      {tab === 'music' && <MusicManager authFetch={authFetch} />}
+      {tab === 'capsule' && role === 'admin' && <CapsuleSettings authFetch={authFetch} />}
+      {tab === 'music' && role === 'admin' && <MusicManager authFetch={authFetch} />}
       {tab === 'trash' && <TrashViewer token={token} authFetch={authFetch} />}
       {tab === 'logs' && role === 'admin' && <LogViewer token={token} authFetch={authFetch} />}
       {tab === 'accounts' && role === 'admin' && <InviteManager authFetch={authFetch} />}

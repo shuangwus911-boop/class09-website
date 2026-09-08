@@ -43,7 +43,7 @@ export default function Page() {
                 <div className="album-card-body">
                   <div className="album-card-title">{m.title}</div>
                   <div className="album-card-date">{m.date}</div>
-                  {m.quote && (
+                  {m.quote?.text?.trim() && (
                     <div className="album-card-quote">
                       「{m.quote.text.slice(0, 20)}…」
                     </div>

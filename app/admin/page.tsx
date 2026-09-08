@@ -49,12 +49,18 @@ function useAuthFetch(token: string, onExpired: () => void) {
   }, [token, onExpired]);
 }
 
-// --- Shared: 浏览器端生成 800px 长边缩略图 ---
+// --- Shared: 浏览器端降采样 ---
 // 封面/网格只绘制不到 600 设备像素，用缩略图可省掉 ~88% 流量；大图仍读原图。
 // 逐级折半而非一次性降采样：既保画质，也避免创建超过 Safari 像素上限的巨型 canvas。
 const THUMB_MAX_EDGE = 800;
+const ORIGINAL_MAX_EDGE = 2000;
 
-async function makeThumbBlob(file: File): Promise<Blob | null> {
+async function downscaleBlob(
+  file: File,
+  maxEdge: number,
+  quality: number,
+  forceReencode = false
+): Promise<Blob | null> {
   if (typeof createImageBitmap !== 'function') return null;
   let bmp: ImageBitmap;
   try {
@@ -65,10 +71,10 @@ async function makeThumbBlob(file: File): Promise<Blob | null> {
   try {
     let w = bmp.width;
     let h = bmp.height;
-    if (Math.max(w, h) <= THUMB_MAX_EDGE) return null;
+    if (Math.max(w, h) <= maxEdge && !forceReencode) return null;
     let src: CanvasImageSource = bmp;
-    while (Math.max(w, h) > THUMB_MAX_EDGE) {
-      const scale = Math.max(0.5, THUMB_MAX_EDGE / Math.max(w, h));
+    while (Math.max(w, h) > maxEdge) {
+      const scale = Math.max(0.5, maxEdge / Math.max(w, h));
       const nw = Math.max(1, Math.round(w * scale));
       const nh = Math.max(1, Math.round(h * scale));
       const canvas = document.createElement('canvas');
@@ -83,8 +89,18 @@ async function makeThumbBlob(file: File): Promise<Blob | null> {
       w = nw;
       h = nh;
     }
+    if (src === bmp) {
+      // 尺寸本来就达标，只是体积太大，按原尺寸重绘一次以便重新编码
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return null;
+      ctx.drawImage(src, 0, 0);
+      src = canvas;
+    }
     return await new Promise<Blob | null>((resolve) =>
-      (src as HTMLCanvasElement).toBlob(resolve, 'image/jpeg', 0.82)
+      (src as HTMLCanvasElement).toBlob(resolve, 'image/jpeg', quality)
     );
   } catch {
     return null;
@@ -92,6 +108,13 @@ async function makeThumbBlob(file: File): Promise<Blob | null> {
     bmp.close?.();
   }
 }
+
+function makeThumbBlob(file: File): Promise<Blob | null> {
+  return downscaleBlob(file, THUMB_MAX_EDGE, 0.82);
+}
+
+// 与 Worker 端 /api/upload 的图片上限保持一致
+const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 
 // --- Shared: move deleted item to trash KV ---
 async function trashToKV(authFetch: any, type: string, data: any, name: string, slug?: string) {
@@ -204,8 +227,9 @@ function MomentCard({ moment, onChange, onRemove, onPublish, onUnpublish, onUplo
   const photos = moment.photos || [];
 
   const handleFile = (file: File) => {
-    if (file.size > 2 * 1024 * 1024) {
-      alert(`图片「${file.name}」超过 2MB（当前 ${(file.size/1024/1024).toFixed(1)}MB），请先压缩后再上传`);
+    // 压缩由 uploadPhoto 负责；这里只挡住连解码都不划算的超大文件
+    if (file.size > 30 * 1024 * 1024) {
+      alert(`图片「${file.name}」有 ${(file.size / 1024 / 1024).toFixed(1)}MB，太大了，请先手动压缩后再上传`);
       return;
     }
     onUploadPhoto(file);
@@ -268,7 +292,7 @@ function MomentCard({ moment, onChange, onRemove, onPublish, onUnpublish, onUplo
           </div>
         )}
         <small style={{ display: 'block', marginTop: 6, fontSize: 10.5, color: 'var(--ink-soft)', letterSpacing: 0.5 }}>
-          支持 jpg/png/webp · 单张 ≤2MB · 建议先压缩到 500KB 以内
+          支持 jpg/png/webp · 手机直出大图会自动压缩后上传 · 压缩后单张 ≤5MB
         </small>
       </div>
 
@@ -338,11 +362,24 @@ function MomentEditor({ token, authFetch }: { token: string; authFetch: any }) {
   };
 
   const uploadPhoto = async (momentIdx: number, file: File) => {
-    const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
     const m = moments[momentIdx];
+    // 手机直出照片常有 4-8MB，先在浏览器压到 2000px / JPEG 0.85 再传
+    let payload: Blob = file;
+    let ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+    try {
+      const shrunk = await downscaleBlob(file, ORIGINAL_MAX_EDGE, 0.85, file.size > MAX_UPLOAD_BYTES);
+      if (shrunk && shrunk.size < file.size) {
+        payload = shrunk;
+        ext = 'jpg';
+      }
+    } catch {}
+    if (payload.size > MAX_UPLOAD_BYTES) {
+      alert(`图片「${file.name}」压缩后仍有 ${(payload.size / 1024 / 1024).toFixed(1)}MB，超过 5MB 上限，请先手动压缩`);
+      return;
+    }
     const key = `${m.slug}/${Date.now()}-${Math.random().toString(36).slice(2, 6)}.${ext}`;
     const formData = new FormData();
-    formData.append('file', file);
+    formData.append('file', new File([payload], `photo.${ext}`, { type: payload.type || 'image/jpeg' }));
     formData.append('key', key);
     try {
       const res = await authFetch(`${API_BASE}/upload`, { method: 'POST', body: formData });
@@ -748,11 +785,19 @@ function TeacherEditor({ token, role, authFetch }: { token: string; role: string
 
   const uploadGlobalAvatar = async (file: File) => {
     if (!file.type.startsWith('image/')) { alert('头像仅支持图片格式（jpg/png/webp/gif）'); return null; }
-    if (file.size > 2 * 1024 * 1024) { alert('头像图片不能超过 2MB，请先压缩后再上传'); return null; }
-    const ext = file.name.split('.').pop()?.toLowerCase() || 'png';
+    let payload: Blob = file;
+    let ext = file.name.split('.').pop()?.toLowerCase() || 'png';
+    // gif 跳过压缩，否则只会留下第一帧
+    if (file.type !== 'image/gif') {
+      try {
+        const shrunk = await downscaleBlob(file, THUMB_MAX_EDGE, 0.85, file.size > MAX_UPLOAD_BYTES);
+        if (shrunk && shrunk.size < file.size) { payload = shrunk; ext = 'jpg'; }
+      } catch {}
+    }
+    if (payload.size > MAX_UPLOAD_BYTES) { alert('头像图片压缩后仍超过 5MB，请先手动压缩后再上传'); return null; }
     const key = `avatar/${Date.now()}.${ext}`;
     const form = new FormData();
-    form.append('file', file);
+    form.append('file', new File([payload], `avatar.${ext}`, { type: payload.type || file.type }));
     form.append('key', key);
     try {
       const res = await authFetch(`${API_BASE}/upload`, { method: 'POST', body: form });

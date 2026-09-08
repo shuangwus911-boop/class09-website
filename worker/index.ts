@@ -81,6 +81,18 @@ function matchKeyOf(child: string, birthday: string): string {
   return `${child.replace(/\s+/g, '').toLowerCase()}|${birthday}`;
 }
 
+// 后台童言三个框全留空也会提交 {text:'',who:'',date:''}，落库前删掉，前台才不会渲染空卡片。
+function sanitizeMoments(list: any): any {
+  if (!Array.isArray(list)) return list;
+  return list.map((m: any) => {
+    if (m && m.quote && !String(m.quote.text || '').trim()) {
+      const { quote, ...rest } = m;
+      return rest;
+    }
+    return m;
+  });
+}
+
 // 一封信一个 key（不是一个大数组），并发封存才不会互相覆盖。
 // 前缀用冒号，避免撞上 capsule_meta / capsule_letters 这类下划线键。
 const CAPSULE_PREFIX = 'capsule:';
@@ -381,10 +393,18 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
         const u = await verifyToken(tk, env.ADMIN_SECRET);
         if (!u) return json({ error: '登录已过期' }, 401);
         if (u.role !== 'admin') return json({ error: '权限不足' }, 403);
-        const list = await env.CLASS09_CMS.list({ prefix: 'log:', limit: 50 });
+        // KV list 按 UTF-8 升序返回，日志键是 log:<时间戳>，直接 limit:50 拿到的是最早 50 条。
+        // 先游标列全量键名（不取值），取末尾 50 个再读值。
+        const keys: string[] = [];
+        let cursor: string | undefined;
+        do {
+          const page = await env.CLASS09_CMS.list({ prefix: 'log:', cursor }) as any;
+          for (const k of page.keys) keys.push(k.name);
+          cursor = page.list_complete ? undefined : page.cursor;
+        } while (cursor);
         const logs = [];
-        for (const k of list.keys) {
-          const val = await env.CLASS09_CMS.get(k.name, 'json');
+        for (const name of keys.slice(-50)) {
+          const val = await env.CLASS09_CMS.get(name, 'json');
           if (val) logs.push(val);
         }
         logs.sort((a: any, b: any) => b.ts - a.ts);
@@ -417,9 +437,9 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
         return json({ error: '仅支持 jpg/png/webp/gif 图片或 m4a/ogg/wav 音频格式' }, 400);
       }
       const isAudio = file.type.startsWith('audio/');
-      const maxSize = isAudio ? 10 * 1024 * 1024 : 2 * 1024 * 1024;
+      const maxSize = isAudio ? 10 * 1024 * 1024 : 5 * 1024 * 1024;
       if (file.size > maxSize) {
-        return json({ error: isAudio ? '音频文件不能超过 10MB' : '图片文件不能超过 2MB，请先压缩后再上传' }, 400);
+        return json({ error: isAudio ? '音频文件不能超过 10MB' : '图片文件不能超过 5MB，请先压缩后再上传' }, 400);
       }
       // Sanitize key: only allow safe characters, prevent path traversal
       if (!/^[a-zA-Z0-9][a-zA-Z0-9_.\/-]*$/.test(key) || key.includes('..') || key.startsWith('/')) {
@@ -446,7 +466,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
 
     if (path === 'moments' && request.method === 'PUT') {
       const body = await request.json();
-      await env.CLASS09_CMS.put('moments', JSON.stringify(body));
+      await env.CLASS09_CMS.put('moments', JSON.stringify(sanitizeMoments(body)));
       await writeLog(env.CLASS09_CMS, 'update_moments', user.email);
       return json({ ok: true });
     }

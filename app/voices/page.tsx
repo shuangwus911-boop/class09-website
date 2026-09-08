@@ -15,7 +15,7 @@ export default function Page() {
 
   // Collect all quotes from moments
   const quotes = moments
-    .filter((m) => m.quote)
+    .filter((m) => m.quote?.text?.trim())
     .map((m) => ({
       text: m.quote!.text,
       who: m.quote!.who,

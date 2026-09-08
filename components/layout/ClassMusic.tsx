@@ -10,6 +10,7 @@ type MusicConfig = {
 };
 
 const STORAGE_KEY = 'class09_music_playing';
+const PAUSED_KEY = 'class09_music_paused';
 
 export default function ClassMusic() {
   const [cfg, setCfg] = useState<MusicConfig | null>(null);
@@ -36,8 +37,11 @@ export default function ClassMusic() {
     el.volume = 0.4;
 
     const wasPlaying = sessionStorage.getItem(STORAGE_KEY) === '1';
+    const userPaused = sessionStorage.getItem(PAUSED_KEY) === '1';
     const savedTime = sessionStorage.getItem('class09_music_time');
-    if (wasPlaying && savedTime) el.currentTime = parseFloat(savedTime);
+    if (savedTime) el.currentTime = parseFloat(savedTime);
+
+    if (userPaused) return;
 
     el.play().then(() => {
       setPlaying(true);
@@ -69,11 +73,13 @@ export default function ClassMusic() {
     if (playing) {
       el.pause();
       setPlaying(false);
+      sessionStorage.setItem(PAUSED_KEY, '1');
     } else {
       try {
         await el.play();
         setPlaying(true);
         setNeedTap(false);
+        sessionStorage.removeItem(PAUSED_KEY);
       } catch {}
     }
   };
@@ -83,12 +89,14 @@ export default function ClassMusic() {
     if (el) { el.pause(); el.currentTime = 0; }
     setPlaying(false);
     setVisible(false);
+    sessionStorage.setItem(PAUSED_KEY, '1');
     sessionStorage.setItem('class09_music_hidden', '1');
   };
 
   const reopen = () => {
     setVisible(true);
     sessionStorage.setItem('class09_music_hidden', '0');
+    sessionStorage.removeItem(PAUSED_KEY);
     if (audioRef.current) {
       audioRef.current.play().then(() => {
         setPlaying(true);
@@ -101,16 +109,24 @@ export default function ClassMusic() {
     <>
       <audio ref={audioRef} src={src} loop preload="auto" />
       {visible && (
-        <button
-          className={`class-music-disc${playing ? ' spinning' : ''}`}
-          onClick={toggle}
-          onContextMenu={(e) => { e.preventDefault(); stop(); }}
-          aria-label={playing ? '暂停音乐' : '播放音乐'}
-          title={playing ? '暂停音乐（右键关闭）' : '点我播放音乐（右键关闭）'}
-        >
-          <span className="class-music-disc-center" />
-          {(!playing || needTap) && <span className="class-music-play-badge">{needTap ? '♪' : '▶'}</span>}
-        </button>
+        <>
+          <button
+            className={`class-music-disc${playing ? ' spinning' : ''}`}
+            onClick={toggle}
+            onContextMenu={(e) => { e.preventDefault(); stop(); }}
+            aria-label={playing ? '暂停音乐' : '播放音乐'}
+            title={playing ? '暂停音乐' : '点我播放音乐'}
+          >
+            <span className="class-music-disc-center" />
+            {(!playing || needTap) && <span className="class-music-play-badge">{needTap ? '♪' : '▶'}</span>}
+          </button>
+          <button
+            className="class-music-close"
+            onClick={stop}
+            aria-label="关闭音乐"
+            title="关闭音乐"
+          >×</button>
+        </>
       )}
       {!visible && (
         <button

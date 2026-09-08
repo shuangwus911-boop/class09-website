@@ -59,7 +59,7 @@ export default function MomentCarousel({ moments }: Props) {
                     <span>{m.semester}</span>
                     <span>查看详情 →</span>
                   </div>
-                  {m.quote && (
+                  {m.quote?.text?.trim() && (
                     <div className="moment-quote">
                       {m.quote.text}
                       <span className="who">

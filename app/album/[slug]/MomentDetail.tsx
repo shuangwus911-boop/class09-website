@@ -101,7 +101,7 @@ export default function MomentDetail({ slug: slugProp }: { slug?: string }) {
         </div>
       )}
 
-      {moment.quote && (
+      {moment.quote?.text?.trim() && (
         <div className="detail-quote">
           <div className="detail-quote-mark">「</div>
           <p className="detail-quote-text">{moment.quote.text}</p>

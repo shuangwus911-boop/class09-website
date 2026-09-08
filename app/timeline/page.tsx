@@ -1,9 +1,13 @@
+'use client';
+
 import Nav from '@/components/layout/Nav';
 import Footer from '@/components/layout/Footer';
-import { TIMELINE } from '@/data/timeline';
+import { resolveTimeline } from '@/data/timeline';
 import { MOMENTS } from '@/data/moments';
 
 export default function Page() {
+  const timeline = resolveTimeline(new Date());
+
   return (
     <>
       <Nav />
@@ -14,7 +18,7 @@ export default function Page() {
       <div className="sec-note">从一年级到毕业 · 每一步都是故事</div>
 
       <div className="tl-vertical">
-        {TIMELINE.map((node, idx) => {
+        {timeline.map((node, idx) => {
           // Find moments belonging to this grade year
           const yearMoments = node.key === 'g1'
             ? MOMENTS.filter((m) => m.semester.includes('一'))

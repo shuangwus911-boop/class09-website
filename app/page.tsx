@@ -11,7 +11,7 @@ import CapsulePreview from '@/components/home/CapsulePreview';
 import TeacherPreview from '@/components/home/TeacherPreview';
 import { MOMENTS as FALLBACK_MOMENTS } from '@/data/moments';
 import { HONORS as FALLBACK_HONORS, getLatestHonor } from '@/data/honors';
-import { TIMELINE } from '@/data/timeline';
+import { resolveTimeline } from '@/data/timeline';
 import type { Moment } from '@/data/moments';
 import type { Honor } from '@/data/honors';
 
@@ -25,6 +25,7 @@ export default function HomePage() {
   }, []);
 
   const latestHonor = honors.find(h => h.featured) ?? honors[0];
+  const timeline = resolveTimeline(new Date());
 
   return (
     <>
@@ -65,7 +66,7 @@ export default function HomePage() {
         <span className="sec-cn">时 光 轴</span>
       </div>
       <div className="sec-note">2025 秋　→　2031 夏　·　我们要一起走的六个学年</div>
-      <Timeline nodes={TIMELINE} />
+      <Timeline nodes={timeline} />
 
       <Footer />
     </>

@@ -137,7 +137,7 @@ export default function Page() {
 
         {mode === 'lookup' ? (
           <form className="capsule-form" onSubmit={lookup}>
-            <div className="capsule-form-lock">🔎 凭孩子姓名 + 生日可以查到交了几封、什么时候交的，但正文要等到 {meta.openDate.replace(/-/g, '.')} 才会显示。刚封存的信可能要一分钟后才出现在这里。</div>
+            <div className="capsule-form-lock">🔎 凭孩子姓名 + 生日可以查到交了几封、什么时候交的，但正文要等到 {meta.openDate.replace(/-/g, '.')} 才会显示。刚封存的信可能要几秒后才出现在这里。</div>
             <label className="capsule-field">
               <span>孩子姓名</span>
               <input value={lookupChild} onChange={e => setLookupChild(e.target.value)} placeholder="如：王嘉嘉" maxLength={20} />
@@ -151,7 +151,7 @@ export default function Page() {
             {lookupResult && (
               <div className="capsule-lookup-result">
                 {lookupResult.count === 0 ? (
-                  <p>没有查到 <strong>{lookupResult.child}</strong> 名下的信。如果是刚刚才封存的，请等一分钟再查；也可能是姓名或生日跟当时填的不一致。</p>
+                  <p>没有查到 <strong>{lookupResult.child}</strong> 名下的信。如果是刚刚才封存的，请等几秒再查；也可能是姓名或生日跟当时填的不一致。</p>
                 ) : (
                   <>
                     <p><strong>{lookupResult.child}</strong> 名下已封存 <strong>{lookupResult.count}</strong> 封信：</p>

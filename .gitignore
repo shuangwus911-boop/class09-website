@@ -34,6 +34,9 @@ yarn-error.log*
 .wrangler/
 .dev.vars
 
+# 本地快照：含账号密码 hash 和时光胶囊信正文，绝不能进 Git
+backups/
+
 # ts
 *.tsbuildinfo
 next-env.d.ts

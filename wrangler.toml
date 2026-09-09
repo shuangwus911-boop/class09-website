@@ -17,4 +17,14 @@ id = "4c7d148a3102460499cd3c0a3ec22897"
 binding = "IMAGES"
 bucket_name = "class09-images"
 
+# 灾备桶：事件归档 events/、删除前归档 deleted/、每日快照 snapshots/
+# 刻意不设任何过期规则——操作记录要永久留存，事件 JSON 六年累计也就几十 MB
+[[r2_buckets]]
+binding = "IMAGES_BACKUP"
+bucket_name = "class09-backup"
+
+# 每日 03:00 UTC（北京时间 11:00）自动全量快照，不依赖本地机器开机
+[triggers]
+crons = ["0 3 * * *"]
+
 # ADMIN_SECRET 不入仓库，用 Worker Secret 注入：wrangler secret put ADMIN_SECRET

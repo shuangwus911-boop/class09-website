@@ -1265,9 +1265,12 @@ function TrashViewer({ token, authFetch }: { token: string; authFetch: any }) {
 
   const restore = async (id: string) => {
     try {
-      await authFetch(`${API_BASE}/trash/${id}`, { method: 'PUT' });
-      setMsg('已恢复');
+      const res = await authFetch(`${API_BASE}/trash/${id}`, { method: 'PUT' });
+      const data = await res.json().catch(() => ({}));
       setItems(items.filter(i => i.id !== id));
+      // 照片记录能恢复但原图可能已找不回，这种情况必须说清楚，不能只报「已恢复」
+      if (data?.warning) { setMsg(data.warning); setTimeout(() => setMsg(''), 8000); return; }
+      setMsg('已恢复');
     } catch (e: any) { setMsg(e.message); }
     setTimeout(() => setMsg(''), 2000);
   };
@@ -1320,11 +1323,81 @@ function TrashViewer({ token, authFetch }: { token: string; authFetch: any }) {
   );
 }
 
+// --- Backup / Disaster Recovery ---
+function BackupPanel({ token, authFetch }: { token: string; authFetch: any }) {
+  const [latest, setLatest] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [running, setRunning] = useState(false);
+  const [msg, setMsg] = useState('');
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const res = await authFetch(`${API_BASE}/backup/status`);
+      const data = await res.json();
+      setLatest(data?.latest ?? null);
+    } catch (e: any) { setMsg(e.message); }
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, [token]);
+
+  const runNow = async () => {
+    setRunning(true);
+    setMsg('正在备份，内容多的话要等十几秒…');
+    try {
+      const res = await authFetch(`${API_BASE}/backup/snapshot`, { method: 'POST' });
+      const data = await res.json();
+      if (data?.manifest) { setLatest(data.manifest); setMsg('备份完成'); }
+      else setMsg(data?.error || '备份失败');
+    } catch (e: any) { setMsg(e.message); }
+    setRunning(false);
+    setTimeout(() => setMsg(''), 6000);
+  };
+
+  const mb = (n: number) => `${(n / 1024 / 1024).toFixed(1)} MB`;
+
+  return (
+    <div className="admin-section">
+      <div className="admin-section-top">
+        <h3>备份</h3>
+        <button className="admin-btn-add" onClick={runNow} disabled={running}>{running ? '备份中...' : '立即备份'}</button>
+      </div>
+      <p className="admin-hint">
+        每天北京时间 11:00 自动备份一次，不需要你的电脑开着。另外每一次改动都会实时留一份记录，
+        照片在删除前也会先存一份，所以从回收站恢复照片能拿回原图。
+      </p>
+
+      {loading && <p className="admin-empty">读取备份状态…</p>}
+      {!loading && !latest && (
+        <p className="admin-empty">还没有备份记录。点右上角「立即备份」做第一次备份。</p>
+      )}
+      {!loading && latest && (
+        <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+          <tbody>
+            <tr><td style={{ padding: '6px 0', color: 'var(--ink-soft)' }}>最近一次备份</td><td>{new Date(latest.finishedAt).toLocaleString('zh-CN')}</td></tr>
+            <tr><td style={{ padding: '6px 0', color: 'var(--ink-soft)' }}>触发方式</td><td>{String(latest.trigger || '').startsWith('cron') ? '每日自动' : '手动'}</td></tr>
+            <tr><td style={{ padding: '6px 0', color: 'var(--ink-soft)' }}>内容条目</td><td>{latest.kvContentKeys} 条</td></tr>
+            <tr><td style={{ padding: '6px 0', color: 'var(--ink-soft)' }}>操作记录</td><td>{latest.kvLogKeys} 条</td></tr>
+            <tr><td style={{ padding: '6px 0', color: 'var(--ink-soft)' }}>照片与音频</td><td>{latest.r2ObjectCount} 个 · {mb(latest.r2TotalBytes || 0)}</td></tr>
+          </tbody>
+        </table>
+      )}
+
+      <p className="admin-hint" style={{ marginTop: 16 }}>
+        备份是给「整站出大问题」兜底的，日常误删请直接用回收站。
+        真要从备份回滚，需要站长在电脑上执行恢复命令，且默认只补回缺失内容、不会删掉备份之后新加的东西。
+      </p>
+      {msg && <span className="admin-msg">{msg}</span>}
+    </div>
+  );
+}
+
 // --- Main Page ---
 export default function AdminPage() {
   const [token, setToken] = useState<string | null>(null);
   const [role, setRole] = useState<string>('admin');
-  const [tab, setTab] = useState<'moments' | 'honors' | 'teacher' | 'capsule' | 'music' | 'trash' | 'logs' | 'invites' | 'accounts'>('moments');
+  const [tab, setTab] = useState<'moments' | 'honors' | 'teacher' | 'capsule' | 'music' | 'trash' | 'logs' | 'invites' | 'accounts' | 'backup'>('moments');
 
   const logout = useCallback(() => {
     localStorage.removeItem('cms_token');
@@ -1366,6 +1439,7 @@ export default function AdminPage() {
         {role === 'admin' && <button className={tab === 'logs' ? 'active' : ''} onClick={() => setTab('logs')}>操作日志</button>}
         {role === 'admin' && <button className={tab === 'invites' ? 'active' : ''} onClick={() => setTab('invites')}>邀请码</button>}
         {role === 'admin' && <button className={tab === 'accounts' ? 'active' : ''} onClick={() => setTab('accounts')}>账号</button>}
+        {role === 'admin' && <button className={tab === 'backup' ? 'active' : ''} onClick={() => setTab('backup')}>备份</button>}
       </div>
       {tab === 'moments' && <MomentEditor token={token} authFetch={authFetch} />}
       {tab === 'honors' && <HonorEditor token={token} authFetch={authFetch} />}
@@ -1376,6 +1450,7 @@ export default function AdminPage() {
       {tab === 'logs' && role === 'admin' && <LogViewer token={token} authFetch={authFetch} />}
       {tab === 'invites' && role === 'admin' && <InviteManager authFetch={authFetch} />}
       {tab === 'accounts' && role === 'admin' && <AccountManager authFetch={authFetch} />}
+      {tab === 'backup' && role === 'admin' && <BackupPanel token={token} authFetch={authFetch} />}
     </div>
   );
 }

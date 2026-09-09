@@ -5,6 +5,7 @@ interface Env {
   ASSETS: Fetcher;
   CLASS09_CMS?: KVNamespace;
   IMAGES?: R2Bucket;
+  IMAGES_BACKUP?: R2Bucket;
   ADMIN_SECRET: string;
 }
 
@@ -61,11 +62,109 @@ function json(data: any, status = 200) {
   });
 }
 
-async function writeLog(kv: KVNamespace, action: string, email: string, detail?: string) {
+function dayOf(ts: number): string {
+  return new Date(ts).toISOString().slice(0, 10);
+}
+
+// 归档是旁路：备份桶挂了也不能让用户的操作跟着失败，所以错误只记录不抛出。
+function archive(env: Env, ctx: ExecutionContext | undefined, key: string, body: string) {
+  const backup = env.IMAGES_BACKUP;
+  if (!backup) return;
+  const task = backup
+    .put(key, body, { httpMetadata: { contentType: 'application/json' } })
+    .catch((e) => console.error('archive failed', key, e));
+  if (ctx) ctx.waitUntil(task as Promise<any>);
+}
+
+// 日志不再设 expirationTtl：这是全站唯一的操作审计记录，过期就再也查不回来了。
+async function writeLog(env: Env, ctx: ExecutionContext | undefined, action: string, email: string, detail?: string) {
+  const kv = env.CLASS09_CMS;
+  if (!kv) return;
   const ts = Date.now();
-  const key = `log:${ts}:${Math.random().toString(36).slice(2, 6)}`;
+  const rand = Math.random().toString(36).slice(2, 6);
   const entry = { ts, action, email, detail: detail || '' };
-  await kv.put(key, JSON.stringify(entry), { expirationTtl: 90 * 24 * 3600 }); // keep 90 days
+  await kv.put(`log:${ts}:${rand}`, JSON.stringify(entry));
+  archive(env, ctx, `events/${dayOf(ts)}/${ts}-${rand}.json`, JSON.stringify(entry));
+}
+
+// 把删除时归档的二进制从备份桶拷回主桶。返回真正找不回来的 key，好让调用方如实告知用户。
+async function recoverBinaries(env: Env, urls: (string | undefined)[]): Promise<string[]> {
+  const missing: string[] = [];
+  for (const url of urls) {
+    if (!url || !url.startsWith('/images/')) continue;
+    const key = url.replace('/images/', '');
+    if (!env.IMAGES) { missing.push(key); continue; }
+    if (await env.IMAGES.head(key)) continue;
+    const archived = await env.IMAGES_BACKUP?.get(`deleted/${key}`);
+    if (!archived) { missing.push(key); continue; }
+    await env.IMAGES.put(key, archived.body, { httpMetadata: archived.httpMetadata });
+  }
+  return missing;
+}
+
+// 全量快照：KV 内容 + R2 对象清单，落到备份桶。cron 每天跑一次，也可由站长手动触发。
+// 日志单独成文件——日志现在永久保留、条数只增不减，混在内容快照里迟早把它撑爆。
+async function takeSnapshot(env: Env, trigger: string): Promise<any> {
+  const kv = env.CLASS09_CMS;
+  const backup = env.IMAGES_BACKUP;
+  if (!kv) throw new Error('KV 未绑定（CLASS09_CMS）');
+  if (!backup) throw new Error('备份桶未绑定（IMAGES_BACKUP）');
+  const startedAt = Date.now();
+  const date = dayOf(startedAt);
+  const base = `snapshots/${date}`;
+
+  const content: Record<string, { value: string | null; metadata?: any }> = {};
+  const logs: Record<string, string | null> = {};
+  const counts: Record<string, number> = {};
+  let cursor: string | undefined;
+  do {
+    const page = (await kv.list({ cursor })) as any;
+    for (const k of page.keys) {
+      const prefix = k.name.split(':')[0];
+      counts[prefix] = (counts[prefix] || 0) + 1;
+      if (k.name.startsWith('log:')) logs[k.name] = await kv.get(k.name);
+      else content[k.name] = { value: await kv.get(k.name), metadata: k.metadata };
+    }
+    cursor = page.list_complete ? undefined : page.cursor;
+  } while (cursor);
+
+  const objects: { key: string; size: number; etag: string; uploaded: string }[] = [];
+  let r2Cursor: string | undefined;
+  if (env.IMAGES) {
+    do {
+      const page = await env.IMAGES.list({ cursor: r2Cursor, limit: 1000 });
+      for (const o of page.objects) {
+        objects.push({ key: o.key, size: o.size, etag: o.etag, uploaded: o.uploaded.toISOString() });
+      }
+      r2Cursor = page.truncated ? (page as any).cursor : undefined;
+    } while (r2Cursor);
+  }
+
+  const manifest = {
+    date,
+    startedAt,
+    finishedAt: Date.now(),
+    trigger,
+    kvKeyCount: Object.keys(content).length + Object.keys(logs).length,
+    kvContentKeys: Object.keys(content).length,
+    kvLogKeys: Object.keys(logs).length,
+    prefixCounts: counts,
+    r2ObjectCount: objects.length,
+    r2TotalBytes: objects.reduce((s, o) => s + o.size, 0),
+  };
+
+  const put = (name: string, body: any) =>
+    backup.put(`${base}/${name}`, JSON.stringify(body), {
+      httpMetadata: { contentType: 'application/json' },
+    });
+  await put('kv.json', content);
+  await put('logs.json', logs);
+  await put('r2-manifest.json', objects);
+  await put('manifest.json', manifest);
+  await backup.put('snapshots/latest.json', JSON.stringify(manifest), {
+    httpMetadata: { contentType: 'application/json' },
+  });
+  return manifest;
 }
 
 type Account = { hash: string; role: string; [k: string]: any };
@@ -87,7 +186,9 @@ async function authenticate(request: Request, env: Env): Promise<{ user: AuthUse
   if (!token) return { error: json({ error: '未登录' }, 401) };
   const payload = await verifyToken(token, env.ADMIN_SECRET);
   if (!payload) return { error: json({ error: '登录已过期' }, 401) };
-  const raw = await env.CLASS09_CMS.get(`admin:${payload.email}`);
+  const kv = env.CLASS09_CMS;
+  if (!kv) return { error: json({ error: 'CMS 尚未配置，请先绑定 KV namespace' }, 503) };
+  const raw = await kv.get(`admin:${payload.email}`);
   if (!raw) return { error: json({ error: '账号已被移除，请联系站长' }, 401) };
   const account = parseAccount(raw);
   if (account.pwChangedAt && payload.iat < account.pwChangedAt) {
@@ -217,7 +318,7 @@ async function listLetters(kv: KVNamespace): Promise<{ key: string; meta: Letter
 // --- Main handler ---
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
     if (request.method === 'OPTIONS') {
@@ -236,7 +337,7 @@ export default {
     }
 
     if (url.pathname.startsWith('/api/')) {
-      return handleApi(request, env, url);
+      return handleApi(request, env, url, ctx);
     }
 
     const assetResponse = await env.ASSETS.fetch(request);
@@ -252,6 +353,15 @@ export default {
       }
     }
     return assetResponse;
+  },
+
+  // 每日快照由 Cloudflare 定时触发，不依赖本地机器是否开机。
+  async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(
+      takeSnapshot(env, `cron ${event.cron}`)
+        .then((m) => console.log('snapshot ok', JSON.stringify(m)))
+        .catch((e) => console.error('snapshot failed', e))
+    );
   },
 };
 
@@ -278,7 +388,7 @@ async function handleImages(request: Request, env: Env, url: URL): Promise<Respo
   return new Response(object.body, { headers });
 }
 
-async function handleApi(request: Request, env: Env, url: URL): Promise<Response> {
+async function handleApi(request: Request, env: Env, url: URL, ctx?: ExecutionContext): Promise<Response> {
   try {
     if (!env.CLASS09_CMS) {
       return json({ error: 'CMS 尚未配置，请先绑定 KV namespace' }, 503);
@@ -301,7 +411,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       const hash = await sha256(password);
       const record = JSON.stringify({ hash, role });
       await env.CLASS09_CMS.put(key, record);
-      await writeLog(env.CLASS09_CMS, 'bootstrap_admin', email, `account seeded/promoted as ${role}`);
+      await writeLog(env, ctx, 'bootstrap_admin', email, `account seeded/promoted as ${role}`);
       return json({ ok: true, email, role });
     }
 
@@ -324,7 +434,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
         lastLogin: Date.now(),
       })).catch(() => {});
       const token = await createToken(email, role, env.ADMIN_SECRET);
-      await writeLog(env.CLASS09_CMS, 'login', email);
+      await writeLog(env, ctx, 'login', email);
       return json({ token, email, role });
     }
 
@@ -349,7 +459,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       invite.usedAt = Date.now();
       await env.CLASS09_CMS.put(`invite:${normCode}`, JSON.stringify(invite), { expirationTtl: 7 * 24 * 3600 });
       const token = await createToken(email, invite.role || 'editor', env.ADMIN_SECRET);
-      await writeLog(env.CLASS09_CMS, 'register', email, `via invite ${normCode} (${invite.role})`);
+      await writeLog(env, ctx, 'register', email, `via invite ${normCode} (${invite.role})`);
       return json({ ok: true, token, email, role: invite.role || 'editor' });
     }
 
@@ -381,7 +491,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       const others = await listLetters(env.CLASS09_CMS);
       const count = others.filter(l => l.key !== letterKey).length + 1;
       const mine = others.filter(l => l.key !== letterKey && l.meta.matchKey === matchKey).length + 1;
-      await writeLog(env.CLASS09_CMS, 'seal_letter', authorName, `${childName} · 全班第 ${count} 封`);
+      await writeLog(env, ctx, 'seal_letter', authorName, `${childName} · 全班第 ${count} 封`);
       return json({ ok: true, count, child: childName, mine });
     }
 
@@ -489,6 +599,25 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
 
     // 编辑与站长同权。站长专属仅限：操作日志、班主任头像、背景音乐、胶囊设置、邀请码。
 
+    // POST /api/backup/snapshot — 立即跑一次全量快照（本地备份脚本用它触发）
+    if (path === 'backup/snapshot' && request.method === 'POST') {
+      try {
+        const manifest = await takeSnapshot(env, `manual ${user.email}`);
+        await writeLog(env, ctx, 'backup_snapshot', user.email, `${manifest.kvKeyCount} keys / ${manifest.r2ObjectCount} objects`);
+        return json({ ok: true, manifest });
+      } catch (e: any) {
+        return json({ error: `快照失败：${e?.message || String(e)}` }, 500);
+      }
+    }
+
+    // GET /api/backup/status — 最近一次快照情况，用来确认备份还在正常运转
+    if (path === 'backup/status' && request.method === 'GET') {
+      if (!env.IMAGES_BACKUP) return json({ error: '备份桶未绑定' }, 503);
+      const latest = await env.IMAGES_BACKUP.get('snapshots/latest.json');
+      if (!latest) return json({ ok: true, latest: null });
+      return json({ ok: true, latest: await latest.json() });
+    }
+
     // POST /api/upload — upload image to R2
     if (path === 'upload' && request.method === 'POST') {
       if (!env.IMAGES) return json({ error: 'R2 存储桶未配置' }, 503);
@@ -518,7 +647,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
         httpMetadata: { contentType: file.type },
       });
 
-      await writeLog(env.CLASS09_CMS, 'upload', user.email, key);
+      await writeLog(env, ctx, 'upload', user.email, key);
       const imageUrl = `/images/${key}`;
       return json({ ok: true, url: imageUrl, key });
     }
@@ -527,8 +656,23 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     if (path.startsWith('images/') && request.method === 'DELETE') {
       if (!env.IMAGES) return json({ error: 'R2 存储桶未配置' }, 503);
       const key = path.replace('images/', '');
+      // R2 删除不可撤销，删之前先把二进制留一份，否则回收站恢复出来的只是一张破图。
+      // 归档失败就不删——宁可留下一个多余文件，也不能把原图弄丢。
+      if (env.IMAGES_BACKUP) {
+        const src = await env.IMAGES.get(key);
+        if (src) {
+          try {
+            await env.IMAGES_BACKUP.put(`deleted/${key}`, src.body, {
+              httpMetadata: src.httpMetadata,
+              customMetadata: { ...src.customMetadata, deletedAt: String(Date.now()), deletedBy: user.email },
+            });
+          } catch {
+            return json({ error: '删除前备份失败，为避免照片丢失已取消删除，请稍后重试' }, 503);
+          }
+        }
+      }
       await env.IMAGES.delete(key);
-      await writeLog(env.CLASS09_CMS, 'delete_image', user.email, key);
+      await writeLog(env, ctx, 'delete_image', user.email, key);
       return json({ ok: true });
     }
 
@@ -536,7 +680,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       const body = await request.json();
       if (!Array.isArray(body)) return json({ error: 'moments 必须是数组' }, 400);
       await upsertSplitAll(env.CLASS09_CMS, SPLIT.moments, sanitizeMoments(body));
-      await writeLog(env.CLASS09_CMS, 'update_moments', user.email);
+      await writeLog(env, ctx, 'update_moments', user.email);
       return json({ ok: true });
     }
 
@@ -546,7 +690,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       const moment = await getSplitItem(env.CLASS09_CMS, SPLIT.moments, slug);
       if (!moment) return json({ error: '未找到该时刻' }, 404);
       await putSplitItem(env.CLASS09_CMS, SPLIT.moments, { ...moment, status: 'published' });
-      await writeLog(env.CLASS09_CMS, 'publish_moment', user.email, slug);
+      await writeLog(env, ctx, 'publish_moment', user.email, slug);
       return json({ ok: true });
     }
 
@@ -556,7 +700,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       const moment = await getSplitItem(env.CLASS09_CMS, SPLIT.moments, slug);
       if (!moment) return json({ error: '未找到该时刻' }, 404);
       await putSplitItem(env.CLASS09_CMS, SPLIT.moments, { ...moment, status: 'draft' });
-      await writeLog(env.CLASS09_CMS, 'unpublish_moment', user.email, slug);
+      await writeLog(env, ctx, 'unpublish_moment', user.email, slug);
       return json({ ok: true });
     }
 
@@ -567,7 +711,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       if (!body || body.slug !== slug) return json({ error: 'slug 与路径不一致' }, 400);
       await ensureSplit(env.CLASS09_CMS, SPLIT.moments);
       await putSplitItem(env.CLASS09_CMS, SPLIT.moments, sanitizeMoment(body));
-      await writeLog(env.CLASS09_CMS, 'update_moment', user.email, slug);
+      await writeLog(env, ctx, 'update_moment', user.email, slug);
       return json({ ok: true });
     }
 
@@ -576,7 +720,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       const slug = path.replace('moments/', '');
       await ensureSplit(env.CLASS09_CMS, SPLIT.moments);
       await env.CLASS09_CMS.delete(`${SPLIT.moments.prefix}${slug}`);
-      await writeLog(env.CLASS09_CMS, 'delete_moment', user.email, slug);
+      await writeLog(env, ctx, 'delete_moment', user.email, slug);
       return json({ ok: true });
     }
 
@@ -584,7 +728,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       const body = await request.json();
       if (!Array.isArray(body)) return json({ error: 'honors 必须是数组' }, 400);
       await upsertSplitAll(env.CLASS09_CMS, SPLIT.honors, body);
-      await writeLog(env.CLASS09_CMS, 'update_honors', user.email);
+      await writeLog(env, ctx, 'update_honors', user.email);
       return json({ ok: true });
     }
 
@@ -595,7 +739,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       if (!body || body.id !== id) return json({ error: 'id 与路径不一致' }, 400);
       await ensureSplit(env.CLASS09_CMS, SPLIT.honors);
       await putSplitItem(env.CLASS09_CMS, SPLIT.honors, body);
-      await writeLog(env.CLASS09_CMS, 'update_honor', user.email, id);
+      await writeLog(env, ctx, 'update_honor', user.email, id);
       return json({ ok: true });
     }
 
@@ -604,14 +748,14 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       const id = path.replace('honors/', '');
       await ensureSplit(env.CLASS09_CMS, SPLIT.honors);
       await env.CLASS09_CMS.delete(`${SPLIT.honors.prefix}${id}`);
-      await writeLog(env.CLASS09_CMS, 'delete_honor', user.email, id);
+      await writeLog(env, ctx, 'delete_honor', user.email, id);
       return json({ ok: true });
     }
 
     if (path === 'quotes' && request.method === 'PUT') {
       const body = await request.json();
       await env.CLASS09_CMS.put('quotes', JSON.stringify(body));
-      await writeLog(env.CLASS09_CMS, 'update_quotes', user.email);
+      await writeLog(env, ctx, 'update_quotes', user.email);
       return json({ ok: true });
     }
 
@@ -620,7 +764,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       const body = await request.json();
       if (!Array.isArray(body)) return json({ error: 'teacher 必须是数组' }, 400);
       await upsertSplitAll(env.CLASS09_CMS, SPLIT.teacher, body);
-      await writeLog(env.CLASS09_CMS, 'update_teacher', user.email);
+      await writeLog(env, ctx, 'update_teacher', user.email);
       return json({ ok: true });
     }
 
@@ -631,7 +775,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       if (!body || body.id !== id) return json({ error: 'id 与路径不一致' }, 400);
       await ensureSplit(env.CLASS09_CMS, SPLIT.teacher);
       await putSplitItem(env.CLASS09_CMS, SPLIT.teacher, body);
-      await writeLog(env.CLASS09_CMS, 'update_letter', user.email, id);
+      await writeLog(env, ctx, 'update_letter', user.email, id);
       return json({ ok: true });
     }
 
@@ -640,7 +784,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       const id = path.replace('teacher/', '');
       await ensureSplit(env.CLASS09_CMS, SPLIT.teacher);
       await env.CLASS09_CMS.delete(`${SPLIT.teacher.prefix}${id}`);
-      await writeLog(env.CLASS09_CMS, 'delete_letter', user.email, id);
+      await writeLog(env, ctx, 'delete_letter', user.email, id);
       return json({ ok: true });
     }
 
@@ -650,7 +794,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       const { avatar } = (await request.json()) as any;
       if (typeof avatar !== 'string') return json({ error: 'avatar 必须是字符串' }, 400);
       await env.CLASS09_CMS.put('teacher_avatar', avatar);
-      await writeLog(env.CLASS09_CMS, 'update_teacher_avatar', user.email, avatar ? 'set' : 'cleared');
+      await writeLog(env, ctx, 'update_teacher_avatar', user.email, avatar ? 'set' : 'cleared');
       return json({ ok: true, avatar });
     }
 
@@ -659,7 +803,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       if (user.role !== 'admin') return json({ error: '仅站长可修改背景音乐' }, 403);
       const body = await request.json();
       await env.CLASS09_CMS.put('music', JSON.stringify(body));
-      await writeLog(env.CLASS09_CMS, 'update_music', user.email);
+      await writeLog(env, ctx, 'update_music', user.email);
       return json({ ok: true });
     }
 
@@ -668,7 +812,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       if (user.role !== 'admin') return json({ error: '仅站长可修改胶囊设置' }, 403);
       const body = await request.json();
       await env.CLASS09_CMS.put('capsule_meta', JSON.stringify(body));
-      await writeLog(env.CLASS09_CMS, 'update_capsule_meta', user.email);
+      await writeLog(env, ctx, 'update_capsule_meta', user.email);
       return json({ ok: true });
     }
 
@@ -681,7 +825,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       const code = Array.from(bytes, b => b.toString(36).padStart(2, '0')).join('').slice(0, 6).toUpperCase();
       const invite = { code, role, note: note || '', createdBy: user.email, createdAt: Date.now() };
       await env.CLASS09_CMS.put(`invite:${code}`, JSON.stringify(invite), { expirationTtl: 7 * 24 * 3600 }); // 7 days
-      await writeLog(env.CLASS09_CMS, 'create_invite', user.email, `${code} (${role})`);
+      await writeLog(env, ctx, 'create_invite', user.email, `${code} (${role})`);
       return json({ ok: true, code, role });
     }
 
@@ -714,7 +858,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       const raw = await env.CLASS09_CMS.get(`invite:${code}`);
       const usedBy = raw ? (JSON.parse(raw).usedBy || '') : '';
       await env.CLASS09_CMS.delete(`invite:${code}`);
-      await writeLog(env.CLASS09_CMS, 'revoke_invite', user.email, code);
+      await writeLog(env, ctx, 'revoke_invite', user.email, code);
       // 删邀请码不影响已经注册出来的账号，要收回权限得去「账号」页删号
       return json({ ok: true, usedBy });
     }
@@ -762,7 +906,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       if (!raw) return json({ error: '账号不存在' }, 404);
       const a = parseAccount(raw);
       await env.CLASS09_CMS.put(`admin:${email}`, JSON.stringify({ ...a, role: newRole }));
-      await writeLog(env.CLASS09_CMS, 'update_account_role', user.email, `${email} → ${newRole}`);
+      await writeLog(env, ctx, 'update_account_role', user.email, `${email} → ${newRole}`);
       return json({ ok: true });
     }
 
@@ -780,7 +924,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
         email, ...meta, deleted_by: user.email, deleted_at: Date.now(),
       }));
       await env.CLASS09_CMS.delete(`admin:${email}`);
-      await writeLog(env.CLASS09_CMS, 'delete_account', user.email, email);
+      await writeLog(env, ctx, 'delete_account', user.email, email);
       return json({ ok: true });
     }
 
@@ -795,7 +939,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
         hash: await sha256(newPassword),
         pwChangedAt: Date.now(),
       }));
-      await writeLog(env.CLASS09_CMS, 'change_password', user.email);
+      await writeLog(env, ctx, 'change_password', user.email);
       return json({ ok: true });
     }
 
@@ -812,18 +956,23 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
         data, deleted_by: user.email, deleted_at: Date.now(),
       };
       await env.CLASS09_CMS.put(`trash:${id}`, JSON.stringify(item));
-      await writeLog(env.CLASS09_CMS, 'trash_item', user.email, `${id} (${type}: ${name})`);
+      await writeLog(env, ctx, 'trash_item', user.email, `${id} (${type}: ${name})`);
       return json({ ok: true, id });
     }
 
     // GET /api/trash — list all trashed items
     if (path === 'trash' && request.method === 'GET') {
-      const list = await env.CLASS09_CMS.list({ prefix: 'trash:', limit: 100 });
-      const items = [];
-      for (const k of list.keys) {
-        const val = await env.CLASS09_CMS.get(k.name, 'json');
-        if (val) items.push({ id: k.name.replace('trash:', ''), ...val });
-      }
+      // 不能截断在 100 条：回收站是唯一的恢复入口，翻不到就等于恢复不了。
+      const items: any[] = [];
+      let cursor: string | undefined;
+      do {
+        const page = (await env.CLASS09_CMS.list({ prefix: 'trash:', cursor })) as any;
+        for (const k of page.keys) {
+          const val = await env.CLASS09_CMS.get(k.name, 'json');
+          if (val) items.push({ id: k.name.replace('trash:', ''), ...val });
+        }
+        cursor = page.list_complete ? undefined : page.cursor;
+      } while (cursor);
       items.sort((a, b) => (b.deleted_at || 0) - (a.deleted_at || 0));
       return json(items);
     }
@@ -839,10 +988,17 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       if (item.type === 'moment_photo') {
         const m = await getSplitItem(env.CLASS09_CMS, SPLIT.moments, item.slug);
         if (!m) return json({ error: '原时刻已不存在，无法恢复照片' }, 400);
+        // 元数据塞回去不够，二进制早在删除时从主桶抹掉了，得先从 deleted/ 拷回来。
+        const missing = await recoverBinaries(env, [item.data?.src, item.data?.thumb]);
         m.photos = m.photos || [];
         m.photos.push(item.data);
         m.count = m.photos.length;
         await putSplitItem(env.CLASS09_CMS, SPLIT.moments, m);
+        if (missing.length) {
+          await env.CLASS09_CMS.delete(key);
+          await writeLog(env, ctx, 'restore_trash', user.email, `${id} (moment_photo, 缺二进制: ${missing.join(',')})`);
+          return json({ ok: true, warning: `照片记录已恢复，但原图文件已不可找回（${missing.join('、')}），前台会显示为缺图` });
+        }
       } else if (item.type === 'moment') {
         await ensureSplit(env.CLASS09_CMS, SPLIT.moments);
         await putSplitItem(env.CLASS09_CMS, SPLIT.moments, item.data);
@@ -858,7 +1014,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       }
 
       await env.CLASS09_CMS.delete(key);
-      await writeLog(env.CLASS09_CMS, 'restore_trash', user.email, `${id} (${item.type})`);
+      await writeLog(env, ctx, 'restore_trash', user.email, `${id} (${item.type})`);
       return json({ ok: true });
     }
 
@@ -869,7 +1025,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       const item = await env.CLASS09_CMS.get(key, 'json') as any;
       if (!item) return json({ error: '记录不存在' }, 404);
       await env.CLASS09_CMS.delete(key);
-      await writeLog(env.CLASS09_CMS, 'perm_delete_trash', user.email, `${id} (${item.type})`);
+      await writeLog(env, ctx, 'perm_delete_trash', user.email, `${id} (${item.type})`);
       return json({ ok: true });
     }
 

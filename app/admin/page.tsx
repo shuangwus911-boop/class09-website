@@ -294,7 +294,8 @@ function MomentCard({ moment, onChange, onRemove, onPublish, onUnpublish, onUplo
           </div>
         )}
         <small style={{ display: 'block', marginTop: 6, fontSize: 10.5, color: 'var(--ink-soft)', letterSpacing: 0.5 }}>
-          支持 jpg/png/webp · 手机直出大图会自动压缩后上传 · 压缩后单张 ≤5MB
+          支持 jpg/png/webp · 手机直出大图会自动压缩后上传 · 压缩后单张 ≤5MB<br />
+          照片上传和删除会立即保存，不用再点「保存表单更改」
         </small>
       </div>
 
@@ -354,7 +355,7 @@ function MomentEditor({ token, authFetch }: { token: string; authFetch: any }) {
   const save = async () => {
     if (!loaded) { setMsg('数据尚未成功加载，暂不能保存（避免覆盖云端）'); setTimeout(() => setMsg(''), 3000); return; }
     const pending = momentsRef.current.filter(m => dirty.includes(m.slug));
-    if (pending.length === 0) { setMsg('没有待保存的改动'); setTimeout(() => setMsg(''), 2000); return; }
+    if (pending.length === 0) { setMsg('当前内容已保存（照片上传和删除会自动保存）'); setTimeout(() => setMsg(''), 3000); return; }
     setSaving(true);
     const failed: string[] = [];
     for (const m of pending) {
@@ -434,8 +435,11 @@ function MomentEditor({ token, authFetch }: { token: string; authFetch: any }) {
         const updated = { ...cur, photos, count: photos.length };
         applyMoments(momentsRef.current.map((x, i) => i === momentIdx ? updated : x));
         // 图片已经躺在 R2 里了，不落库的话刷新一下就只剩孤儿文件
-        if (await persist(updated)) clearDirty(updated.slug);
-        else { markDirty(updated.slug); setMsg('照片已上传但保存失败，请点「保存所有更改」重试'); setTimeout(() => setMsg(''), 4000); }
+        if (await persist(updated)) {
+          clearDirty(updated.slug);
+          setMsg('照片已上传并自动保存');
+          setTimeout(() => setMsg(''), 3000);
+        } else { markDirty(updated.slug); setMsg('照片已上传但保存失败，请点「保存表单更改」重试'); setTimeout(() => setMsg(''), 4000); }
       } else {
         alert(data.error || '上传失败');
       }
@@ -495,7 +499,7 @@ function MomentEditor({ token, authFetch }: { token: string; authFetch: any }) {
         {moments.length === 0 && <p className="admin-empty">{loaded ? '暂无数据，点击上方按钮添加第一个时刻' : (loadError ? '' : '加载中…')}</p>}
       </div>
       <div className="admin-actions">
-        <button className="admin-btn-save" onClick={save} disabled={saving || !loaded}>{saving ? '保存中...' : '保存所有更改'}</button>
+        <button className="admin-btn-save" onClick={save} disabled={saving || !loaded}>{saving ? '保存中...' : '保存表单更改'}</button>
         {msg && <span className="admin-msg">{msg}</span>}
       </div>
     </div>
